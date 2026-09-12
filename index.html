@@ -412,9 +412,13 @@
       <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div class="flex items-center gap-3">
           <span class="font-medium text-slate-700">快速配課工具：</span>
-          <button id="btn-auto-assign-homeroom" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 font-medium flex items-center gap-1">
+          <button id="btn-auto-assign-homeroom" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 font-medium flex items-center gap-1" title="為國語、數學、生活、綜合等導師核心領域填入班級導師">
             <i data-lucide="user-check" class="w-3.5 h-3.5 text-blue-600"></i>
             一鍵配置各班導師授課
+          </button>
+          <button id="btn-clear-fake-teachers" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-300 font-medium flex items-center gap-1" title="清除所有自動填入的虛擬導師(導師_...)，還原為未配課狀態">
+            <i data-lucide="eraser" class="w-3.5 h-3.5 text-rose-600"></i>
+            清除未配課虛擬導師
           </button>
           <button id="btn-copy-assignment-parallel" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 font-medium flex items-center gap-1">
             <i data-lucide="copy" class="w-3.5 h-3.5 text-purple-600"></i>
@@ -896,7 +900,7 @@
     function initDemoAssignments(state) {
       state.assignments = [];
       state.classes.forEach(c => {
-        const homeroom = `導師_${c.className}`;
+        const homeroom = `${c.className}導師`;
         const subjects = state.gradeSubjects[c.gradeId] || [];
 
         subjects.forEach(s => {
@@ -1098,8 +1102,23 @@
     });
 
     function syncAssignmentsForClass(classId, gradeId) {
-      const homeroom = `導師_${classId}`;
       const subjects = ensureGradeSubjects(gradeId);
+      const validSubIds = new Set(subjects.map(s => s.id));
+
+      // 移除該班已不存在於科目設定中的無效/舊科目配課
+      AppState.assignments = AppState.assignments.filter(a => {
+        if (a.classId !== classId) return true;
+        return validSubIds.has(a.subjectId);
+      });
+
+      // 移除重複配課
+      const seenSubIds = new Set();
+      AppState.assignments = AppState.assignments.filter(a => {
+        if (a.classId !== classId) return true;
+        if (seenSubIds.has(a.subjectId)) return false;
+        seenSubIds.add(a.subjectId);
+        return true;
+      });
 
       subjects.forEach(s => {
         const existing = AppState.assignments.find(a => a.classId === classId && a.subjectId === s.id);
@@ -1109,10 +1128,17 @@
             gradeId,
             subjectId: s.id,
             subjectName: s.name,
-            teacherName: homeroom,
+            teacherName: '', // 未配課：預設為空，絕不私自填入導師
             weeklyPeriods: s.weeklyPeriods,
             roomId: null
           });
+        } else {
+          existing.subjectName = s.name;
+          existing.weeklyPeriods = s.weeklyPeriods;
+          // 自動清理先前版本留存的虛擬導師名稱 (如 導師_C_...)
+          if (existing.teacherName && (existing.teacherName.startsWith('導師_C_') || existing.teacherName.startsWith('導師_c_') || existing.teacherName.includes('178917'))) {
+            existing.teacherName = '';
+          }
         }
       });
     }
@@ -1366,7 +1392,7 @@
           gradeId: activeSubjectGrade,
           subjectId: subId,
           subjectName: name,
-          teacherName: `導師_${c.className}`,
+          teacherName: '', // 新增科目預設為未配課
           weeklyPeriods: periods,
           roomId: null
         });
@@ -1392,9 +1418,9 @@
         const allGrades = Array.from(new Set([...AppState.classes.map(c => c.gradeId), 1, 2, 3, 4, 5, 6]));
         allGrades.forEach(g => {
           if (g !== activeSubjectGrade) {
-            AppState.gradeSubjects[g] = JSON.parse(JSON.stringify(sourceSubjects)).map(s => ({
+            AppState.gradeSubjects[g] = JSON.parse(JSON.stringify(sourceSubjects)).map((s, idx) => ({
               ...s,
-              id: `SUB_G${g}_${s.name}_${Date.now()}_${Math.floor(Math.random()*1000)}`
+              id: `SUB_G${g}_${idx}_${s.name}`
             }));
             AppState.classes.filter(c => c.gradeId == g).forEach(c => {
               syncAssignmentsForClass(c.id, g);
@@ -1405,9 +1431,9 @@
       } else {
         const targetG = parseInt(target, 10);
         if (!confirm(`確定要將【${activeSubjectGrade} 年級】的科目設定複製至【${targetG} 年級】嗎？`)) return;
-        AppState.gradeSubjects[targetG] = JSON.parse(JSON.stringify(sourceSubjects)).map(s => ({
+        AppState.gradeSubjects[targetG] = JSON.parse(JSON.stringify(sourceSubjects)).map((s, idx) => ({
           ...s,
-          id: `SUB_G${targetG}_${s.name}_${Date.now()}_${Math.floor(Math.random()*1000)}`
+          id: `SUB_G${targetG}_${idx}_${s.name}`
         }));
         AppState.classes.filter(c => c.gradeId == targetG).forEach(c => {
           syncAssignmentsForClass(c.id, targetG);
@@ -1582,8 +1608,10 @@
 
       const loads = {};
       AppState.assignments.forEach(a => {
-        if (a.teacherName) {
-          loads[a.teacherName] = (loads[a.teacherName] || 0) + (a.weeklyPeriods || 0);
+        const t = (a.teacherName || '').trim();
+        // 排除未配課與舊版遺留的虛擬代碼
+        if (t && !t.startsWith('導師_C_') && !t.startsWith('導師_c_') && !t.includes('178917')) {
+          loads[t] = (loads[t] || 0) + (a.weeklyPeriods || 0);
         }
       });
 
@@ -1611,20 +1639,45 @@
     }
 
     document.getElementById('btn-auto-assign-homeroom').addEventListener('click', () => {
+      let count = 0;
       AppState.classes.forEach(c => {
-        const homeroom = `導師_${c.className}`;
+        const homeroom = `${c.className}導師`;
         const subjects = ensureGradeSubjects(c.gradeId);
         subjects.forEach(s => {
-          if (s.category === 'core' || s.name.includes('國語') || s.name.includes('數學') || s.name.includes('生活') || s.name.includes('綜合')) {
+          // 僅針對國語、數學、生活、綜合、彈性等導師領域進行配置
+          const isHomeroomSubject = s.name.includes('國語') || s.name.includes('數學') || s.name.includes('生活') || s.name.includes('綜合') || s.name.includes('彈性');
+          // 排除英語、自然、藝文、音樂、體育、健體、資訊等科任專業課程
+          const isSpecialist = s.name.includes('英語') || s.name.includes('自然') || s.name.includes('藝文') || s.name.includes('音樂') || s.name.includes('體育') || s.name.includes('健體') || s.name.includes('資訊') || s.name.includes('科技') || s.name.includes('本土');
+          
+          if (isHomeroomSubject && !isSpecialist) {
             const a = AppState.assignments.find(x => x.classId === c.id && x.subjectId === s.id);
-            if (a) a.teacherName = homeroom;
+            if (a) {
+              a.teacherName = homeroom;
+              count++;
+            }
           }
         });
       });
       saveState();
       renderAssignmentsModule();
-      showToast('已一鍵配置各班導師授課！', 'success');
+      showToast(`已為各班導師領域配置【班級導師】(${count} 門課程)！`, 'success');
     });
+
+    const btnClearFake = document.getElementById('btn-clear-fake-teachers');
+    if (btnClearFake) {
+      btnClearFake.addEventListener('click', () => {
+        let cleared = 0;
+        AppState.assignments.forEach(a => {
+          if (a.teacherName && (a.teacherName.startsWith('導師_') || a.teacherName.includes('導師_') || a.teacherName.includes('178917') || a.teacherName.endsWith('導師'))) {
+            a.teacherName = '';
+            cleared++;
+          }
+        });
+        saveState();
+        renderAssignmentsModule();
+        showToast(`已成功清除 ${cleared} 筆導師配課，還原為乾淨未配課狀態！`, 'success');
+      });
+    }
 
     document.getElementById('btn-copy-assignment-parallel').addEventListener('click', () => {
       const allGrades = Array.from(new Set(AppState.classes.map(c => c.gradeId)));
@@ -1638,7 +1691,7 @@
             const targetClass = gClasses[i];
             firstAssignments.forEach(sourceA => {
               const targetA = AppState.assignments.find(a => a.classId === targetClass.id && a.subjectId === sourceA.subjectId);
-              if (targetA && !sourceA.teacherName.startsWith('導師_')) {
+              if (targetA && sourceA.teacherName && !sourceA.teacherName.endsWith('導師') && !sourceA.teacherName.startsWith('導師_')) {
                 targetA.teacherName = sourceA.teacherName;
               }
             });
@@ -1740,7 +1793,12 @@
 
     function populateSchedulingDropdowns() {
       const teachers = new Set();
-      AppState.assignments.forEach(a => { if (a.teacherName) teachers.add(a.teacherName); });
+      AppState.assignments.forEach(a => {
+        const t = (a.teacherName || '').trim();
+        if (t && !t.startsWith('導師_C_') && !t.startsWith('導師_c_') && !t.includes('178917')) {
+          teachers.add(t);
+        }
+      });
       const teacherArray = Array.from(teachers).sort();
 
       const selectPreTeacher = document.getElementById('select-pre-teacher-name');
@@ -2066,7 +2124,7 @@
                 <td class="border border-slate-200 p-2 text-center align-middle">
                   <div class="${cardBg} border rounded-lg p-2 shadow-xs transition hover:shadow-md cursor-pointer">
                     <div class="font-bold text-sm text-slate-800">${unit.subjectName}</div>
-                    <div class="text-[11px] text-slate-600 mt-0.5">${unit.teacherName || '未指定'}</div>
+                    <div class="text-[11px] ${unit.teacherName ? 'text-slate-600' : 'text-rose-500 font-medium'} mt-0.5">${unit.teacherName ? unit.teacherName : '(未配課)'}</div>
                     ${unit.roomName ? `<div class="text-[10px] bg-teal-100 text-teal-800 rounded px-1.5 py-0.2 mt-1 inline-block">📍 ${unit.roomName}</div>` : ''}
                   </div>
                 </td>
@@ -2308,7 +2366,7 @@
 
       const sName = String(a.subjectName || (sub ? sub.name : '') || '未命名科目').trim();
       const sPeriods = Math.max(0, parseInt(a.weeklyPeriods !== undefined ? a.weeklyPeriods : (sub ? sub.weeklyPeriods : 0), 10) || 0);
-      const tName = String(a.teacherName || `導師_${cls.className}` || '').trim();
+      const tName = String(a.teacherName || '').trim(); // 未配課則為空字串，不綁定教師衝突約束
 
       const room = this.specialRooms.find(r => {
         if (!r) return false;
@@ -2722,18 +2780,41 @@
         }
       }
 
-      // Auto-repair assignments
+      // Auto-repair and clean assignments
       let repairedCount = 0;
+      const validClassIds = new Set(AppState.classes.map(c => c.id));
+      // 1. 清理已不存在班級的配課
+      const prevAssignLen = AppState.assignments.length;
+      AppState.assignments = AppState.assignments.filter(a => validClassIds.has(a.classId));
+      if (AppState.assignments.length !== prevAssignLen) repairedCount++;
+
+      // 2. 清理各班過期科目配課與重複項目
       AppState.classes.forEach(c => {
         const subjects = ensureGradeSubjects(c.gradeId);
+        const validSubIds = new Set(subjects.map(s => s.id));
+        const seenSubIds = new Set();
+
+        AppState.assignments = AppState.assignments.filter(a => {
+          if (a.classId !== c.id) return true;
+          if (!validSubIds.has(a.subjectId)) return false; // 移除不存在的科目
+          if (seenSubIds.has(a.subjectId)) return false; // 移除重複項目
+          seenSubIds.add(a.subjectId);
+          return true;
+        });
+
+        // 3. 確保所有現存科目都有配課紀錄，並修復歷史殘留虛擬導師名稱
         subjects.forEach(s => {
           let a = AppState.assignments.find(x => x.classId === c.id && x.subjectId === s.id);
           if (!a) {
-            a = { classId: c.id, gradeId: c.gradeId, subjectId: s.id, subjectName: s.name, teacherName: `導師_${c.className}`, weeklyPeriods: s.weeklyPeriods, roomId: null };
+            a = { classId: c.id, gradeId: c.gradeId, subjectId: s.id, subjectName: s.name, teacherName: '', weeklyPeriods: s.weeklyPeriods, roomId: null };
             AppState.assignments.push(a);
             repairedCount++;
           } else {
-            if (!a.teacherName) { a.teacherName = `導師_${c.className}`; repairedCount++; }
+            // 清理舊版本產生的導師_C_...
+            if (a.teacherName && (a.teacherName.startsWith('導師_C_') || a.teacherName.startsWith('導師_c_') || a.teacherName.includes('178917'))) {
+              a.teacherName = '';
+              repairedCount++;
+            }
             if (!a.subjectName) { a.subjectName = s.name; repairedCount++; }
             if (a.weeklyPeriods === undefined) { a.weeklyPeriods = s.weeklyPeriods; repairedCount++; }
           }
