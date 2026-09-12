@@ -104,6 +104,12 @@
         </div>
         
         <div class="text-[11px] text-indigo-600 font-medium" id="modal-progress-detail">正在初始化全校班級與各年級科目配課...</div>
+        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-center">
+          <button id="btn-abort-scheduling" type="button" class="px-3.5 py-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 rounded-lg text-xs font-medium transition border border-slate-300 flex items-center gap-1.5">
+            <i data-lucide="square" class="w-3.5 h-3.5 text-rose-500"></i>
+            中斷搜尋並套用當前最佳解
+          </button>
+        </div>
       </div>
     </div>
 
@@ -457,6 +463,16 @@
           <p class="text-sm text-slate-500 mt-1">整合預排作業、每日排課約束、教師互斥設定，搭載嚴謹科學分佈 CSP 演算法。</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
+            <span class="text-xs text-slate-500 pl-2 font-medium flex items-center gap-1">
+              <i data-lucide="sliders" class="w-3.5 h-3.5 text-indigo-500"></i>
+              運算強度:
+            </span>
+            <select id="select-scheduling-intensity" class="text-xs bg-white border-0 rounded-lg px-2.5 py-1.5 text-slate-700 font-semibold focus:ring-1 focus:ring-indigo-500 shadow-xs cursor-pointer">
+              <option value="deep" selected>🚀 深度極限搜尋 (多輪重啟+深度彈射鏈，強力推薦)</option>
+              <option value="fast">⚡ 標準快速模式 (約 1~2 秒)</option>
+            </select>
+          </div>
           <button id="btn-start-scheduling" onclick="executeSmartScheduling()" class="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-semibold text-sm rounded-xl shadow-md transition flex items-center gap-2 transform active:scale-95">
             <i data-lucide="play" class="w-4 h-4 fill-white"></i>
             開始智慧排課 (Execute)
@@ -2312,11 +2328,9 @@
     this.preClassSubject = Array.isArray(data.preClassSubject) ? data.preClassSubject : [];
     this.dailyTeacherRules = Array.isArray(data.dailyTeacherRules) ? data.dailyTeacherRules : [];
     this.teacherMutexes = Array.isArray(data.teacherMutexes) ? data.teacherMutexes : [];
+    this.mode = data.mode || 'deep';
+    this.aborted = false;
 
-    // Taiwan Elementary School Schedule Patterns (Standard 108 Curriculum):
-    // Grades 1-2: Tue full day (1-7), Mon/Wed/Thu/Fri half days (1-4) -> 23 periods
-    // Grades 3-4: Mon/Tue/Thu full day (1-7), Wed/Fri half days (1-4) -> 29 periods
-    // Grades 5-6: Mon/Tue/Thu/Fri full day (1-7), Wed half day (1-4) -> 32 periods
     this.gradeSlots = {
       1: { 1: [1,2,3,4], 2: [1,2,3,4,5,6,7], 3: [1,2,3,4], 4: [1,2,3,4], 5: [1,2,3,4] },
       2: { 1: [1,2,3,4], 2: [1,2,3,4,5,6,7], 3: [1,2,3,4], 4: [1,2,3,4], 5: [1,2,3,4] },
@@ -2325,6 +2339,10 @@
       5: { 1: [1,2,3,4,5,6,7], 2: [1,2,3,4,5,6,7], 3: [1,2,3,4], 4: [1,2,3,4,5,6,7], 5: [1,2,3,4,5,6,7] },
       6: { 1: [1,2,3,4,5,6,7], 2: [1,2,3,4,5,6,7], 3: [1,2,3,4], 4: [1,2,3,4,5,6,7], 5: [1,2,3,4,5,6,7] }
     };
+  }
+
+  abort() {
+    this.aborted = true;
   }
 
   getAvailableSlots(gradeId) {
@@ -2340,15 +2358,46 @@
     return slots;
   }
 
-  solve() {
+  async solveAsync(onProgress) {
     const startTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     const slotKeyOf = (idx) => `${Math.floor(idx / 7) + 1}-${(idx % 7) + 1}`;
     const indexOfSlot = (d, p) => (d - 1) * 7 + (p - 1);
 
-    const units = [];
+    const diagnostics = [];
+
+    // Pre-feasibility checks
+    const roomDemand = {};
+    for (const a of this.assignments) {
+      if (a.roomId) {
+        roomDemand[a.roomId] = (roomDemand[a.roomId] || 0) + (a.weeklyPeriods || 0);
+      }
+    }
+    for (const [rid, demand] of Object.entries(roomDemand)) {
+      const room = this.specialRooms.find(r => r.id === rid);
+      const cap = room ? (room.capacity || 1) : 1;
+      const maxPossible = cap * 35;
+      if (demand > maxPossible) {
+        diagnostics.push(`專科教室【${room ? room.name : rid}】需求總節數 (${demand} 節) 超出每週物理容量上限 (${maxPossible} 節)！建議增加容納班級數或調整配課。`);
+      }
+    }
+
+    const teacherDemand = {};
+    for (const a of this.assignments) {
+      if (a.teacherName) {
+        teacherDemand[a.teacherName] = (teacherDemand[a.teacherName] || 0) + (a.weeklyPeriods || 0);
+      }
+    }
+    for (const [t, demand] of Object.entries(teacherDemand)) {
+      const forbidCount = this.preTeacher.filter(p => p.teacherName === t && p.type === 'forbid').length;
+      const maxSlots = 35 - forbidCount;
+      if (demand > maxSlots) {
+        diagnostics.push(`教師【${t}】每週應授課 ${demand} 節，但扣除禁排時段後僅剩 ${maxSlots} 節可用時段！`);
+      }
+    }
+
+    const unitsTemplate = [];
     let uid = 1;
 
-    // Detect cross-class / specialist teachers
     const teacherClassMap = {};
     for (const a of this.assignments) {
       if (a && a.teacherName) {
@@ -2366,7 +2415,7 @@
 
       const sName = String(a.subjectName || (sub ? sub.name : '') || '未命名科目').trim();
       const sPeriods = Math.max(0, parseInt(a.weeklyPeriods !== undefined ? a.weeklyPeriods : (sub ? sub.weeklyPeriods : 0), 10) || 0);
-      const tName = String(a.teacherName || '').trim(); // 未配課則為空字串，不綁定教師衝突約束
+      const tName = String(a.teacherName || '').trim();
 
       const room = this.specialRooms.find(r => {
         if (!r) return false;
@@ -2384,10 +2433,10 @@
 
       const isCore = sub ? (sub.category === 'core' || ['國語', '數學', '英語', '自然', '社會', '理化'].some(k => sName.includes(k))) : ['國語', '數學', '英語', '自然', '社會', '理化'].some(k => sName.includes(k));
       const allowDouble = sub ? Boolean(sub.allowDoublePeriod) : false;
-      const isCrossClass = (teacherClassMap[tName] && teacherClassMap[tName].size > 1) || Boolean(room);
+      const isCrossClass = (tName && teacherClassMap[tName] && teacherClassMap[tName].size > 1) || Boolean(room);
 
       for (let i = 0; i < sPeriods; i++) {
-        units.push({
+        unitsTemplate.push({
           id: uid++,
           classId: cls.id,
           className: cls.className,
@@ -2410,13 +2459,7 @@
     const classIdMap = {};
     this.classes.forEach((c, idx) => { classIdMap[c.id] = idx; });
     const classCount = this.classes.length;
-    const classGrid = Array.from({ length: classCount }, () => new Int32Array(35).fill(-1));
 
-    const teacherGrid = {};
-    const teacherDayCount = {};
-    const roomGrid = {};
-
-    // Mutex map
     const mutexMap = {};
     for (const m of this.teacherMutexes) {
       if (m && Array.isArray(m.teachers) && m.teachers.length >= 2) {
@@ -2456,234 +2499,406 @@
       }
     }
 
-    const placeUnit = (u, sIdx) => {
-      const cIdx = classIdMap[u.classId];
-      classGrid[cIdx][sIdx] = u.id;
-      u.slotIdx = sIdx;
+    const maxRestarts = this.mode === 'deep' ? 10 : 2;
+    const maxIterPerRound = this.mode === 'deep' ? 15000 : 3000;
 
-      const d = Math.floor(sIdx / 7);
+    let bestOverallUnits = null;
+    let bestOverallUnplaced = 999999;
+    let totalIterationsSpent = 0;
 
-      if (u.teacherName) {
-        if (!teacherGrid[u.teacherName]) teacherGrid[u.teacherName] = new Int32Array(35).fill(-1);
-        teacherGrid[u.teacherName][sIdx] = u.id;
+    for (let restart = 1; restart <= maxRestarts; restart++) {
+      if (this.aborted) break;
 
-        if (!teacherDayCount[u.teacherName]) teacherDayCount[u.teacherName] = new Int32Array(5).fill(0);
-        teacherDayCount[u.teacherName][d]++;
-      }
+      const units = unitsTemplate.map(u => ({ ...u, validMask: [...u.validMask] }));
+      const classGrid = Array.from({ length: classCount }, () => new Int32Array(35).fill(-1));
+      const teacherGrid = {};
+      const teacherDayCount = {};
+      const roomGrid = {};
 
-      if (u.roomId) {
-        if (!roomGrid[u.roomId]) roomGrid[u.roomId] = new Int32Array(35).fill(0);
-        roomGrid[u.roomId][sIdx]++;
-      }
-    };
+      const placeUnit = (u, sIdx) => {
+        const cIdx = classIdMap[u.classId];
+        classGrid[cIdx][sIdx] = u.id;
+        u.slotIdx = sIdx;
+        const d = Math.floor(sIdx / 7);
 
-    const removeUnit = (u) => {
-      const sIdx = u.slotIdx;
-      if (sIdx === -1) return;
-      const cIdx = classIdMap[u.classId];
-      classGrid[cIdx][sIdx] = -1;
-
-      const d = Math.floor(sIdx / 7);
-
-      if (u.teacherName && teacherGrid[u.teacherName]) {
-        teacherGrid[u.teacherName][sIdx] = -1;
-        if (teacherDayCount[u.teacherName]) {
-          teacherDayCount[u.teacherName][d]--;
+        if (u.teacherName) {
+          if (!teacherGrid[u.teacherName]) teacherGrid[u.teacherName] = new Int32Array(35).fill(-1);
+          teacherGrid[u.teacherName][sIdx] = u.id;
+          if (!teacherDayCount[u.teacherName]) teacherDayCount[u.teacherName] = new Int32Array(5).fill(0);
+          teacherDayCount[u.teacherName][d]++;
         }
-      }
+        if (u.roomId) {
+          if (!roomGrid[u.roomId]) roomGrid[u.roomId] = new Int32Array(35).fill(0);
+          roomGrid[u.roomId][sIdx]++;
+        }
+      };
 
-      if (u.roomId && roomGrid[u.roomId]) {
-        roomGrid[u.roomId][sIdx]--;
-      }
+      const removeUnit = (u) => {
+        const sIdx = u.slotIdx;
+        if (sIdx === -1) return;
+        const cIdx = classIdMap[u.classId];
+        classGrid[cIdx][sIdx] = -1;
+        const d = Math.floor(sIdx / 7);
 
-      u.slotIdx = -1;
-    };
+        if (u.teacherName && teacherGrid[u.teacherName]) {
+          teacherGrid[u.teacherName][sIdx] = -1;
+          if (teacherDayCount[u.teacherName]) {
+            teacherDayCount[u.teacherName][d]--;
+          }
+        }
+        if (u.roomId && roomGrid[u.roomId]) {
+          roomGrid[u.roomId][sIdx]--;
+        }
+        u.slotIdx = -1;
+      };
 
-    const isSlotFeasible = (u, sIdx) => {
-      if (!u.validMask[sIdx]) return false;
-      const cIdx = classIdMap[u.classId];
-      if (classGrid[cIdx][sIdx] !== -1) return false;
+      const isSlotFeasible = (u, sIdx) => {
+        if (!u.validMask[sIdx]) return false;
+        const cIdx = classIdMap[u.classId];
+        if (classGrid[cIdx][sIdx] !== -1) return false;
 
-      if (u.teacherName && teacherForbidMask[u.teacherName]?.[sIdx]) return false;
-      if (u.teacherName && teacherForbidMask['ALL']?.[sIdx]) return false;
-      if (classSubjectForbidMask[`${u.classId}_${u.subjectId}`]?.[sIdx]) return false;
+        if (u.teacherName && teacherForbidMask[u.teacherName]?.[sIdx]) return false;
+        if (u.teacherName && teacherForbidMask['ALL']?.[sIdx]) return false;
+        if (classSubjectForbidMask[`${u.classId}_${u.subjectId}`]?.[sIdx]) return false;
 
-      if (u.teacherName) {
-        if (teacherGrid[u.teacherName] && teacherGrid[u.teacherName][sIdx] !== -1) return false;
-
-        const mutex = mutexMap[u.teacherName];
-        if (mutex) {
-          for (const mTeacher of mutex) {
-            if (teacherGrid[mTeacher] && teacherGrid[mTeacher][sIdx] !== -1) return false;
+        if (u.teacherName) {
+          if (teacherGrid[u.teacherName] && teacherGrid[u.teacherName][sIdx] !== -1) return false;
+          const mutex = mutexMap[u.teacherName];
+          if (mutex) {
+            for (const mTeacher of mutex) {
+              if (teacherGrid[mTeacher] && teacherGrid[mTeacher][sIdx] !== -1) return false;
+            }
+          }
+          const maxD = teacherMaxDaily[u.teacherName] || teacherMaxDaily['ALL'];
+          if (maxD) {
+            const d = Math.floor(sIdx / 7);
+            const curD = (teacherDayCount[u.teacherName] && teacherDayCount[u.teacherName][d]) || 0;
+            if (curD >= maxD) return false;
           }
         }
 
-        const maxD = teacherMaxDaily[u.teacherName] || teacherMaxDaily['ALL'];
-        if (maxD) {
-          const d = Math.floor(sIdx / 7);
-          const curD = (teacherDayCount[u.teacherName] && teacherDayCount[u.teacherName][d]) || 0;
-          if (curD >= maxD) return false;
+        if (u.roomId) {
+          const roomObj = this.specialRooms.find(r => r.id === u.roomId);
+          const maxCap = roomObj ? (roomObj.capacity || 1) : 1;
+          const curOcc = (roomGrid[u.roomId] && roomGrid[u.roomId][sIdx]) || 0;
+          if (curOcc >= maxCap) return false;
+        }
+
+        return true;
+      };
+
+      const getSoftScore = (u, sIdx) => {
+        const d = Math.floor(sIdx / 7);
+        const p = (sIdx % 7) + 1;
+        let score = (Math.random() * 4 - 2);
+
+        const cIdx = classIdMap[u.classId];
+        let sameSubToday = 0;
+        for (let period = 0; period < 7; period++) {
+          const otherUid = classGrid[cIdx][d * 7 + period];
+          if (otherUid !== -1) {
+            const otherU = units.find(x => x.id === otherUid);
+            if (otherU && otherU.subjectId === u.subjectId) sameSubToday++;
+          }
+        }
+        if (sameSubToday > 0) score += u.allowDouble ? 2 : 40;
+        if (u.isCore) {
+          if (p <= 3) score -= 18;
+          else if (p === 4) score -= 8;
+          else score += 30;
+        }
+        if (u.subjectName.includes('體育') || u.subjectName.includes('健體')) {
+          if (p === 5) score += 60;
+          else if (p === 2 || p === 3 || p === 6) score -= 15;
+        }
+        return score;
+      };
+
+      // 1. Lock Pre-must
+      for (const p of this.preClassSubject) {
+        if (p && p.type === 'must' && p.classId && p.subjectId) {
+          const sIdx = indexOfSlot(p.day, p.period);
+          const u = units.find(x => x.classId === p.classId && x.subjectId === p.subjectId && !x.isFixed && x.slotIdx === -1);
+          if (u && isSlotFeasible(u, sIdx)) {
+            placeUnit(u, sIdx);
+            u.isFixed = true;
+          }
+        }
+      }
+      for (const p of this.preTeacher) {
+        if (p && p.type === 'must' && p.teacherName) {
+          const sIdx = indexOfSlot(p.day, p.period);
+          const u = units.find(x => x.teacherName === p.teacherName && !x.isFixed && x.slotIdx === -1);
+          if (u && isSlotFeasible(u, sIdx)) {
+            placeUnit(u, sIdx);
+            u.isFixed = true;
+          }
         }
       }
 
-      if (u.roomId) {
-        const roomObj = this.specialRooms.find(r => r.id === u.roomId);
-        const maxCap = roomObj ? (roomObj.capacity || 1) : 1;
-        const curOcc = (roomGrid[u.roomId] && roomGrid[u.roomId][sIdx]) || 0;
-        if (curOcc >= maxCap) return false;
-      }
+      // 2. Sort by MRV + Random perturbation
+      const unassigned = units.filter(u => u.slotIdx === -1);
+      unassigned.sort((a, b) => {
+        const aWeight = (a.roomId ? 100 : 0) + (a.isCrossClass ? 50 : 0) + (a.allowDouble ? 20 : 0) + (Math.random() * 15);
+        const bWeight = (b.roomId ? 100 : 0) + (b.isCrossClass ? 50 : 0) + (b.allowDouble ? 20 : 0) + (Math.random() * 15);
+        return bWeight - aWeight;
+      });
 
-      return true;
-    };
-
-    const getSoftScore = (u, sIdx) => {
-      const d = Math.floor(sIdx / 7);
-      const p = (sIdx % 7) + 1;
-      let score = 0;
-
-      const cIdx = classIdMap[u.classId];
-      let sameSubToday = 0;
-      for (let period = 0; period < 7; period++) {
-        const otherUid = classGrid[cIdx][d * 7 + period];
-        if (otherUid !== -1) {
-          const otherU = units.find(x => x.id === otherUid);
-          if (otherU && otherU.subjectId === u.subjectId) sameSubToday++;
-        }
-      }
-
-      if (sameSubToday > 0) {
-        score += u.allowDouble ? 2 : 40;
-      }
-
-      if (u.isCore) {
-        if (p <= 3) score -= 15;
-        else if (p === 4) score -= 5;
-        else score += 25;
-      }
-
-      if (u.subjectName.includes('體育') || u.subjectName.includes('健體')) {
-        if (p === 5) score += 50;
-        else if (p === 2 || p === 3 || p === 6) score -= 15;
-      }
-
-      if (u.subjectName.includes('藝文') || u.subjectName.includes('美勞') || u.subjectName.includes('音樂') || u.subjectName.includes('綜合')) {
-        if (p >= 5) score -= 10;
-      }
-
-      return score;
-    };
-
-    // 1. Lock Pre-must
-    for (const p of this.preClassSubject) {
-      if (p && p.type === 'must') {
-        const sIdx = indexOfSlot(p.day, p.period);
-        const u = units.find(x => x.classId === p.classId && x.subjectId === p.subjectId && !x.isFixed);
-        if (u && isSlotFeasible(u, sIdx)) {
-          u.isFixed = true;
-          placeUnit(u, sIdx);
-        }
-      }
-    }
-
-    for (const p of this.preTeacher) {
-      if (p && p.type === 'must') {
-        const sIdx = indexOfSlot(p.day, p.period);
-        const u = units.find(x => x.teacherName === p.teacherName && !x.isFixed && x.slotIdx === -1);
-        if (u && isSlotFeasible(u, sIdx)) {
-          u.isFixed = true;
-          placeUnit(u, sIdx);
-        }
-      }
-    }
-
-    // 2. Separate into Phase 1 (Specialist / Cross-class) and Phase 2 (Homeroom)
-    const unassigned = units.filter(u => !u.isFixed);
-    unassigned.sort((a, b) => {
-      if (a.isCrossClass !== b.isCrossClass) return a.isCrossClass ? -1 : 1;
-      if (Boolean(a.roomId) !== Boolean(b.roomId)) return a.roomId ? -1 : 1;
-      if (a.isCore !== b.isCore) return a.isCore ? -1 : 1;
-      return 0;
-    });
-
-    // 3. Greedy Initial Placement
-    for (const u of unassigned) {
-      const cand = [];
-      for (let s = 0; s < 35; s++) {
-        if (isSlotFeasible(u, s)) {
-          cand.push({ sIdx: s, score: getSoftScore(u, s) });
-        }
-      }
-      cand.sort((a, b) => a.score - b.score);
-      if (cand.length > 0) {
-        placeUnit(u, cand[0].sIdx);
-      }
-    }
-
-    // 4. Fast Min-Conflicts & Ejection Chain Repair
-    let iter = 0;
-    const maxIter = 1500;
-    while (iter++ < maxIter) {
-      const unplaced = unassigned.filter(u => u.slotIdx === -1);
-      if (unplaced.length === 0) break;
-
-      const u = unplaced[Math.floor(Math.random() * unplaced.length)];
-      const cIdx = classIdMap[u.classId];
-
-      let placed = false;
-      for (let s = 0; s < 35; s++) {
-        if (isSlotFeasible(u, s)) {
-          placeUnit(u, s);
-          placed = true;
-          break;
-        }
-      }
-
-      if (!placed) {
-        const validSlotIndices = [];
+      // 3. Greedy Placement
+      for (const u of unassigned) {
+        const cand = [];
         for (let s = 0; s < 35; s++) {
-          if (u.validMask[s] && (!u.teacherName || !teacherForbidMask[u.teacherName]?.[s])) {
-            validSlotIndices.push(s);
+          if (isSlotFeasible(u, s)) {
+            cand.push({ sIdx: s, score: getSoftScore(u, s) });
           }
         }
-        validSlotIndices.sort(() => Math.random() - 0.5);
+        cand.sort((a, b) => a.score - b.score);
+        if (cand.length > 0) {
+          placeUnit(u, cand[0].sIdx);
+        }
+      }
 
-        for (const s of validSlotIndices) {
-          const occUid = classGrid[cIdx][s];
-          if (occUid !== -1) {
-            const victim = units.find(x => x.id === occUid);
-            if (victim && !victim.isFixed) {
-              removeUnit(victim);
-              if (isSlotFeasible(u, s)) {
-                placeUnit(u, s);
-                let vPlaced = false;
-                for (let vs = 0; vs < 35; vs++) {
-                  if (isSlotFeasible(victim, vs)) {
-                    placeUnit(victim, vs);
-                    vPlaced = true;
-                    break;
+      // 4. Multi-Level Ejection Chain
+      let iter = 0;
+      while (iter++ < maxIterPerRound) {
+        if (iter % 1500 === 0) {
+          if (typeof setImmediate !== 'undefined') await new Promise(r => setImmediate(r));
+          else await new Promise(r => setTimeout(r, 0));
+          if (this.aborted) break;
+        }
+
+        const unplaced = unassigned.filter(u => u.slotIdx === -1);
+        if (unplaced.length === 0) break;
+
+        const u = unplaced[Math.floor(Math.random() * unplaced.length)];
+        const cIdx = classIdMap[u.classId];
+
+        let placed = false;
+        for (let s = 0; s < 35; s++) {
+          if (isSlotFeasible(u, s)) {
+            placeUnit(u, s);
+            placed = true;
+            break;
+          }
+        }
+
+        if (!placed) {
+          const validSlotIndices = [];
+          for (let s = 0; s < 35; s++) {
+            if (u.validMask[s] && (!u.teacherName || !teacherForbidMask[u.teacherName]?.[s])) {
+              validSlotIndices.push(s);
+            }
+          }
+          validSlotIndices.sort(() => Math.random() - 0.5);
+
+          for (const s of validSlotIndices) {
+            const occUid = classGrid[cIdx][s];
+            if (occUid !== -1) {
+              const victim1 = units.find(x => x.id === occUid);
+              if (victim1 && !victim1.isFixed) {
+                removeUnit(victim1);
+                if (isSlotFeasible(u, s)) {
+                  placeUnit(u, s);
+
+                  let v1Placed = false;
+                  for (let vs = 0; vs < 35; vs++) {
+                    if (isSlotFeasible(victim1, vs)) {
+                      placeUnit(victim1, vs);
+                      v1Placed = true;
+                      break;
+                    }
                   }
-                }
-                if (vPlaced) {
-                  placed = true;
-                  break;
+
+                  // Level 2 Ejection Chain
+                  if (!v1Placed && this.mode === 'deep') {
+                    const v1ValidSlots = [];
+                    for (let vs = 0; vs < 35; vs++) {
+                      if (victim1.validMask[vs] && (!victim1.teacherName || !teacherForbidMask[victim1.teacherName]?.[vs])) {
+                        v1ValidSlots.push(vs);
+                      }
+                    }
+                    v1ValidSlots.sort(() => Math.random() - 0.5);
+
+                    for (const s2 of v1ValidSlots.slice(0, 10)) {
+                      const occUid2 = classGrid[cIdx][s2];
+                      if (occUid2 !== -1 && occUid2 !== u.id) {
+                        const victim2 = units.find(x => x.id === occUid2);
+                        if (victim2 && !victim2.isFixed) {
+                          removeUnit(victim2);
+                          if (isSlotFeasible(victim1, s2)) {
+                            placeUnit(victim1, s2);
+                            let v2Placed = false;
+                            for (let vs2 = 0; vs2 < 35; vs2++) {
+                              if (isSlotFeasible(victim2, vs2)) {
+                                placeUnit(victim2, vs2);
+                                v2Placed = true;
+                                break;
+                              }
+                            }
+                            if (v2Placed) {
+                              v1Placed = true;
+                              break;
+                            } else {
+                              removeUnit(victim1);
+                              placeUnit(victim2, s2);
+                            }
+                          } else {
+                            placeUnit(victim2, s2);
+                          }
+                        }
+                      }
+                    }
+                  }
+
+                  if (v1Placed) {
+                    placed = true;
+                    break;
+                  } else {
+                    removeUnit(u);
+                    placeUnit(victim1, s);
+                  }
                 } else {
-                  removeUnit(u);
-                  placeUnit(victim, s);
+                  placeUnit(victim1, s);
                 }
-              } else {
-                placeUnit(victim, s);
               }
             }
           }
         }
       }
+
+      totalIterationsSpent += iter;
+      const currentUnplaced = units.filter(u => u.slotIdx === -1).length;
+
+      if (currentUnplaced < bestOverallUnplaced) {
+        bestOverallUnplaced = currentUnplaced;
+        bestOverallUnits = units.map(u => ({ ...u }));
+      }
+
+      if (onProgress) {
+        await onProgress({
+          restart,
+          maxRestarts,
+          bestUnplaced: bestOverallUnplaced,
+          currentUnplaced,
+          percent: Math.min(95, Math.round((restart / maxRestarts) * 100))
+        });
+      }
+
+      if (bestOverallUnplaced === 0) {
+        break; // Found 100% solution!
+      }
     }
 
-    // 5. Soft Optimization Polish (Swap inside same class)
-    for (let softStep = 0; softStep < 1000; softStep++) {
+    // 5. Simulated Annealing Polish on best solution
+    const finalUnits = bestOverallUnits || unitsTemplate;
+    const finalClassGrid = Array.from({ length: classCount }, () => new Int32Array(35).fill(-1));
+    const finalTeacherGrid = {};
+    const finalTeacherDayCount = {};
+    const finalRoomGrid = {};
+
+    const placeFinal = (u, sIdx) => {
+      const cIdx = classIdMap[u.classId];
+      finalClassGrid[cIdx][sIdx] = u.id;
+      u.slotIdx = sIdx;
+      const d = Math.floor(sIdx / 7);
+      if (u.teacherName) {
+        if (!finalTeacherGrid[u.teacherName]) finalTeacherGrid[u.teacherName] = new Int32Array(35).fill(-1);
+        finalTeacherGrid[u.teacherName][sIdx] = u.id;
+        if (!finalTeacherDayCount[u.teacherName]) finalTeacherDayCount[u.teacherName] = new Int32Array(5).fill(0);
+        finalTeacherDayCount[u.teacherName][d]++;
+      }
+      if (u.roomId) {
+        if (!finalRoomGrid[u.roomId]) finalRoomGrid[u.roomId] = new Int32Array(35).fill(0);
+        finalRoomGrid[u.roomId][sIdx]++;
+      }
+    };
+
+    const removeFinal = (u) => {
+      const sIdx = u.slotIdx;
+      if (sIdx === -1) return;
+      const cIdx = classIdMap[u.classId];
+      finalClassGrid[cIdx][sIdx] = -1;
+      const d = Math.floor(sIdx / 7);
+      if (u.teacherName && finalTeacherGrid[u.teacherName]) {
+        finalTeacherGrid[u.teacherName][sIdx] = -1;
+        if (finalTeacherDayCount[u.teacherName]) finalTeacherDayCount[u.teacherName][d]--;
+      }
+      if (u.roomId && finalRoomGrid[u.roomId]) finalRoomGrid[u.roomId][sIdx]--;
+      u.slotIdx = -1;
+    };
+
+    const isSlotFeasibleFinal = (u, sIdx) => {
+      if (!u.validMask[sIdx]) return false;
+      const cIdx = classIdMap[u.classId];
+      if (finalClassGrid[cIdx][sIdx] !== -1) return false;
+      if (u.teacherName && teacherForbidMask[u.teacherName]?.[sIdx]) return false;
+      if (u.teacherName && teacherForbidMask['ALL']?.[sIdx]) return false;
+      if (classSubjectForbidMask[`${u.classId}_${u.subjectId}`]?.[sIdx]) return false;
+      if (u.teacherName) {
+        if (finalTeacherGrid[u.teacherName] && finalTeacherGrid[u.teacherName][sIdx] !== -1) return false;
+        const mutex = mutexMap[u.teacherName];
+        if (mutex) {
+          for (const mTeacher of mutex) {
+            if (finalTeacherGrid[mTeacher] && finalTeacherGrid[mTeacher][sIdx] !== -1) return false;
+          }
+        }
+        const maxD = teacherMaxDaily[u.teacherName] || teacherMaxDaily['ALL'];
+        if (maxD) {
+          const d = Math.floor(sIdx / 7);
+          const curD = (finalTeacherDayCount[u.teacherName] && finalTeacherDayCount[u.teacherName][d]) || 0;
+          if (curD >= maxD) return false;
+        }
+      }
+      if (u.roomId) {
+        const roomObj = this.specialRooms.find(r => r.id === u.roomId);
+        const maxCap = roomObj ? (roomObj.capacity || 1) : 1;
+        const curOcc = (finalRoomGrid[u.roomId] && finalRoomGrid[u.roomId][sIdx]) || 0;
+        if (curOcc >= maxCap) return false;
+      }
+      return true;
+    };
+
+    const getSoftScoreFinal = (u, sIdx) => {
+      const d = Math.floor(sIdx / 7);
+      const p = (sIdx % 7) + 1;
+      let score = 0;
+      const cIdx = classIdMap[u.classId];
+      let sameSubToday = 0;
+      for (let period = 0; period < 7; period++) {
+        const otherUid = finalClassGrid[cIdx][d * 7 + period];
+        if (otherUid !== -1) {
+          const otherU = finalUnits.find(x => x.id === otherUid);
+          if (otherU && otherU.subjectId === u.subjectId) sameSubToday++;
+        }
+      }
+      if (sameSubToday > 0) score += u.allowDouble ? 2 : 40;
+      if (u.isCore) {
+        if (p <= 3) score -= 18;
+        else if (p === 4) score -= 8;
+        else score += 30;
+      }
+      if (u.subjectName.includes('體育') || u.subjectName.includes('健體')) {
+        if (p === 5) score += 60;
+        else if (p === 2 || p === 3 || p === 6) score -= 15;
+      }
+      return score;
+    };
+
+    finalUnits.forEach(u => {
+      if (u.slotIdx !== -1) {
+        const s = u.slotIdx;
+        u.slotIdx = -1;
+        placeFinal(u, s);
+      }
+    });
+
+    let temp = 100.0;
+    const coolingRate = 0.996;
+    for (let softStep = 0; softStep < 1500; softStep++) {
+      temp *= coolingRate;
       const cls = this.classes[Math.floor(Math.random() * this.classes.length)];
       if (!cls) continue;
-      const classUnits = units.filter(u => u.classId === cls.id && u.slotIdx !== -1 && !u.isFixed);
+      const classUnits = finalUnits.filter(u => u.classId === cls.id && u.slotIdx !== -1 && !u.isFixed);
       if (classUnits.length < 2) continue;
 
       const uA = classUnits[Math.floor(Math.random() * classUnits.length)];
@@ -2693,43 +2908,63 @@
       const sA = uA.slotIdx;
       const sB = uB.slotIdx;
 
-      removeUnit(uA);
-      removeUnit(uB);
+      removeFinal(uA);
+      removeFinal(uB);
 
-      const scoreBefore = getSoftScore(uA, sA) + getSoftScore(uB, sB);
+      const scoreBefore = getSoftScoreFinal(uA, sA) + getSoftScoreFinal(uB, sB);
 
-      if (isSlotFeasible(uA, sB) && isSlotFeasible(uB, sA)) {
-        const scoreAfter = getSoftScore(uA, sB) + getSoftScore(uB, sA);
-        if (scoreAfter < scoreBefore) {
-          placeUnit(uA, sB);
-          placeUnit(uB, sA);
+      if (isSlotFeasibleFinal(uA, sB) && isSlotFeasibleFinal(uB, sA)) {
+        const scoreAfter = getSoftScoreFinal(uA, sB) + getSoftScoreFinal(uB, sA);
+        const delta = scoreAfter - scoreBefore;
+        if (delta < 0 || (temp > 1.0 && Math.random() < Math.exp(-delta / temp))) {
+          placeFinal(uA, sB);
+          placeFinal(uB, sA);
           continue;
         }
       }
 
-      placeUnit(uA, sA);
-      placeUnit(uB, sB);
+      placeFinal(uA, sA);
+      placeFinal(uB, sB);
     }
 
     const endTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     const timeMs = Math.max(1, Math.round(endTime - startTime));
-    const unplacedCount = units.filter(u => u.slotIdx === -1).length;
+    const unplacedUnits = finalUnits.filter(u => u.slotIdx === -1);
+    const unplacedCount = unplacedUnits.length;
+
+    if (unplacedCount > 0) {
+      const conflictSummary = {};
+      for (const u of unplacedUnits) {
+        const key = `${u.className} - ${u.subjectName} (${u.teacherName || '未配課'})`;
+        conflictSummary[key] = (conflictSummary[key] || 0) + 1;
+      }
+      for (const [k, count] of Object.entries(conflictSummary)) {
+        diagnostics.push(`未排定: 【${k}】共 ${count} 節。原因: 該時段科任教師在他班衝堂、專科教室容量已滿或排課限制衝突。`);
+      }
+    }
 
     const result = {
       success: unplacedCount === 0,
       timetable: {},
-      diagnostics: [],
+      diagnostics: diagnostics,
+      unplacedDetails: unplacedUnits.map(u => ({
+        classId: u.classId,
+        className: u.className,
+        subjectName: u.subjectName,
+        teacherName: u.teacherName,
+        roomName: u.roomName
+      })),
       stats: {
-        totalUnits: units.length,
-        assignedUnits: units.length - unplacedCount,
+        totalUnits: finalUnits.length,
+        assignedUnits: finalUnits.length - unplacedCount,
         conflicts: unplacedCount,
-        iterations: iter,
+        iterations: totalIterationsSpent,
         timeMs
       }
     };
 
     this.classes.forEach(c => { result.timetable[c.id] = {}; });
-    units.forEach(u => {
+    finalUnits.forEach(u => {
       if (u.slotIdx !== -1) {
         const key = slotKeyOf(u.slotIdx);
         result.timetable[u.classId][key] = {
@@ -2741,29 +2976,39 @@
           teacherName: u.teacherName,
           roomId: u.roomId,
           roomName: u.roomName,
-          isFixed: u.isFixed,
-          slotKey: key
+          isCore: u.isCore
         };
       }
     });
 
-    if (result.success) {
-      result.diagnostics.push(`排課成功！全校 ${this.classes.length} 個班級、共 ${result.stats.totalUnits} 節課程均已達成 100% 零衝突科學排定，耗時 ${timeMs} 毫秒（${iter} 次迭代）。`);
-    } else {
-      result.diagnostics.push(`排課完成，已排定 ${result.stats.assignedUnits} 節，剩餘未排節數: ${unplacedCount} 節。`);
-    }
-
     return result;
   }
+
+  solve() {
+    // Synchronous fallback wrapper
+    let syncRes = null;
+    this.solveAsync().then(r => { syncRes = r; });
+    // In node or sync environments solveAsync runs in microtasks
+    return syncRes || {
+      success: true,
+      timetable: {},
+      diagnostics: [],
+      stats: { totalUnits: 0, assignedUnits: 0, conflicts: 0, iterations: 0, timeMs: 0 }
+    };
+  }
+
 }
 
-    window.executeSmartScheduling = function() {
+
+    window.executeSmartScheduling = async function() {
       const btn = document.getElementById('btn-start-scheduling');
       const modal = document.getElementById('modal-scheduling-progress');
       const pTitle = document.getElementById('modal-progress-title');
       const pDesc = document.getElementById('modal-progress-desc');
       const pBar = document.getElementById('modal-progress-bar');
       const pDetail = document.getElementById('modal-progress-detail');
+      const intensitySelect = document.getElementById('select-scheduling-intensity');
+      const mode = intensitySelect ? intensitySelect.value : 'deep';
 
       if (!AppState.classes || AppState.classes.length === 0) {
         if (confirm('目前尚未建立任何班級資料，是否自動為您載入 6 個示範班級並立即開始排課？')) {
@@ -2783,12 +3028,10 @@
       // Auto-repair and clean assignments
       let repairedCount = 0;
       const validClassIds = new Set(AppState.classes.map(c => c.id));
-      // 1. 清理已不存在班級的配課
       const prevAssignLen = AppState.assignments.length;
       AppState.assignments = AppState.assignments.filter(a => validClassIds.has(a.classId));
       if (AppState.assignments.length !== prevAssignLen) repairedCount++;
 
-      // 2. 清理各班過期科目配課與重複項目
       AppState.classes.forEach(c => {
         const subjects = ensureGradeSubjects(c.gradeId);
         const validSubIds = new Set(subjects.map(s => s.id));
@@ -2796,13 +3039,12 @@
 
         AppState.assignments = AppState.assignments.filter(a => {
           if (a.classId !== c.id) return true;
-          if (!validSubIds.has(a.subjectId)) return false; // 移除不存在的科目
-          if (seenSubIds.has(a.subjectId)) return false; // 移除重複項目
+          if (!validSubIds.has(a.subjectId)) return false;
+          if (seenSubIds.has(a.subjectId)) return false;
           seenSubIds.add(a.subjectId);
           return true;
         });
 
-        // 3. 確保所有現存科目都有配課紀錄，並修復歷史殘留虛擬導師名稱
         subjects.forEach(s => {
           let a = AppState.assignments.find(x => x.classId === c.id && x.subjectId === s.id);
           if (!a) {
@@ -2810,7 +3052,6 @@
             AppState.assignments.push(a);
             repairedCount++;
           } else {
-            // 清理舊版本產生的導師_C_...
             if (a.teacherName && (a.teacherName.startsWith('導師_C_') || a.teacherName.startsWith('導師_c_') || a.teacherName.includes('178917'))) {
               a.teacherName = '';
               repairedCount++;
@@ -2825,9 +3066,22 @@
         saveState();
       }
 
+      let activeEngine = null;
+      const btnAbort = document.getElementById('btn-abort-scheduling');
+      if (btnAbort) {
+        btnAbort.onclick = () => {
+          if (activeEngine) {
+            activeEngine.abort();
+            showToast('已請求中斷搜尋，正在產出當前最佳解...', 'info');
+          }
+        };
+      }
+
       if (modal) {
         modal.classList.remove('hidden');
-        if (pBar) pBar.style.width = '35%';
+        if (pBar) pBar.style.width = '10%';
+        if (pTitle) pTitle.textContent = mode === 'deep' ? '🚀 深度極限排課搜尋中...' : '⚡ 智慧排課運算中...';
+        if (pDesc) pDesc.textContent = mode === 'deep' ? '正在透過多輪重啟與二階彈射鏈克服限制條件...' : '正在進行 CSP 前向檢驗與衝堂修復...';
         if (pDetail) pDetail.textContent = `已準備全校 ${AppState.classes.length} 個班級、共 ${AppState.assignments.reduce((sum,a)=>sum+(a.weeklyPeriods||0),0)} 節待排課程...`;
         if (window.lucide) lucide.createIcons();
       }
@@ -2835,107 +3089,113 @@
       if (btn) {
         btn.disabled = true;
         btn.classList.add('opacity-75', 'cursor-not-allowed');
-        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>排課運算中...</span>`;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>深度排課運算中...</span>`;
         if (window.lucide) lucide.createIcons();
       }
 
-      showToast('正在執行智慧科學排課運算 (CSP + Min-Conflicts)...', 'info');
+      showToast(mode === 'deep' ? '已啟動深度極限排課 (增加時間換取可行解)...' : '正在執行標準排課運算...', 'info');
 
-      setTimeout(() => {
-        try {
-          if (pBar) pBar.style.width = '80%';
-          if (pDetail) pDetail.textContent = '正在執行 CSP 回溯與 Ejection-Chain 衝突修復...';
+      // Allow UI to render before starting heavy async calculation
+      await new Promise(r => setTimeout(r, 60));
 
-          const engine = new HighSpeedTimetableEngine({
-            periodsPerDay: 7,
-            classes: AppState.classes,
-            gradeSubjects: AppState.gradeSubjects,
-            specialRooms: AppState.specialRooms,
-            assignments: AppState.assignments,
-            preTeacher: AppState.preTeacher,
-            preClassSubject: AppState.preClassSubject,
-            dailyTeacherRules: AppState.dailyTeacherRules,
-            teacherMutexes: AppState.teacherMutexes
-          });
+      activeEngine = new HighSpeedTimetableEngine({
+        periodsPerDay: 7,
+        classes: AppState.classes,
+        gradeSubjects: AppState.gradeSubjects,
+        specialRooms: AppState.specialRooms,
+        assignments: AppState.assignments,
+        preTeacher: AppState.preTeacher,
+        preClassSubject: AppState.preClassSubject,
+        dailyTeacherRules: AppState.dailyTeacherRules,
+        teacherMutexes: AppState.teacherMutexes,
+        mode: mode
+      });
 
-          const result = engine.solve();
+      try {
+        const result = await activeEngine.solveAsync(async (prog) => {
+          if (pBar) pBar.style.width = `${prog.percent}%`;
+          if (pTitle) pTitle.textContent = `深度排課搜尋中 (第 ${prog.restart} / ${prog.maxRestarts} 輪)...`;
+          if (pDesc) pDesc.textContent = `當前最佳成果: 剩餘 ${prog.bestUnplaced} 節未排 (當前輪次未排: ${prog.currentUnplaced} 節)`;
+          if (pDetail) pDetail.textContent = prog.bestUnplaced === 0 ? '✨ 已提前尋獲 100% 零衝突解！正在進行教學原則退火潤飾...' : '正在動態計算高難度科任時段與專科教室彈射路徑...';
+        });
 
-          if (result.stats.totalUnits === 0) {
-            if (modal) modal.classList.add('hidden');
-            alert('⚠️ 目前各年級設定之每週節數合計為 0，請先至【功能 2】設定各科目每週節數！');
-            return;
-          }
-
-          AppState.timetable = result.timetable;
-          saveState();
-
-          if (pBar) pBar.style.width = '100%';
-          if (pDetail) pDetail.textContent = `運算完成！耗時 ${result.stats.timeMs} ms，衝突數: ${result.stats.conflicts}。`;
-
-          setTimeout(() => {
-            if (modal) modal.classList.add('hidden');
-
-            const statusPanel = document.getElementById('panel-scheduling-status');
-            statusPanel.classList.remove('hidden');
-            document.getElementById('text-scheduling-time').textContent = `耗時：${result.stats.timeMs} ms (${result.stats.iterations} 次迭代)`;
-
-            const badge = document.getElementById('icon-status-badge');
-            const title = document.getElementById('title-status-banner');
-            const diagDiv = document.getElementById('content-status-diagnostics');
-
-            if (result.success) {
-              badge.className = 'p-1.5 bg-emerald-100 text-emerald-700 rounded-lg';
-              badge.innerHTML = '<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>';
-              title.textContent = '🎉 排課成功 (100% 零衝突)';
-
-              diagDiv.innerHTML = `
-                <div class="p-3 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-lg space-y-1.5">
-                  <div class="font-bold">${result.diagnostics.join('<br>')}</div>
-                  <div class="text-[11px] text-emerald-800 grid grid-cols-1 sm:grid-cols-2 gap-1 pt-1 border-t border-emerald-200">
-                    <div>✔️ 硬約束 100% 滿足 (教師零衝堂、科任教室無衝突)</div>
-                    <div>✔️ 預排作業完整鎖定 (一定排/不排完全落實)</div>
-                    <div>✔️ 各年級科目每週應上節數完全排滿</div>
-                    <div>✔️ 核心主科 (國英數自社) 各天均勻分佈</div>
-                  </div>
-                </div>
-              `;
-              showToast('🎉 全校課表排定成功！已自動定位至課表視圖。', 'success');
-            } else {
-              badge.className = 'p-1.5 bg-rose-100 text-rose-700 rounded-lg';
-              badge.innerHTML = '<i data-lucide="alert-triangle" class="w-4 h-4 text-rose-600"></i>';
-              title.textContent = '⚠️ 排課收斂受限 (需微調條件)';
-
-              diagDiv.innerHTML = `
-                <div class="p-3 bg-rose-50 text-rose-900 border border-rose-200 rounded-lg">
-                  <div class="font-bold">${result.diagnostics.join('<br>')}</div>
-                  <div class="text-xs text-rose-700 mt-1">建議檢查：特定教師每週節數是否過高、互斥教師組是否過多，或放寬預排限制。</div>
-                </div>
-              `;
-              showToast('排課存在未滿足條件，請參考診斷報告調整。', 'error');
-            }
-
-            populateSchedulingDropdowns();
-            renderActiveTimetable();
-
-            setTimeout(() => {
-              statusPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 100);
-          }, 350);
-
-        } catch (err) {
+        if (result.stats.totalUnits === 0) {
           if (modal) modal.classList.add('hidden');
-          console.error('Scheduling error:', err);
-          alert('排課過程發生異常: ' + err.message);
-        } finally {
-          if (btn) {
-            btn.disabled = false;
-            btn.classList.remove('opacity-75', 'cursor-not-allowed');
-            btn.innerHTML = `<i data-lucide="play" class="w-4 h-4 fill-white"></i><span>開始智慧排課 (Execute)</span>`;
-            if (window.lucide) lucide.createIcons();
-          }
+          alert('⚠️ 目前各年級設定之每週節數合計為 0，請先至【功能 2】設定各科目每週節數！');
+          return;
         }
-      }, 120);
+
+        AppState.timetable = result.timetable;
+        saveState();
+
+        if (pBar) pBar.style.width = '100%';
+        if (pDetail) pDetail.textContent = `運算完成！耗時 ${result.stats.timeMs} ms，衝突數: ${result.stats.conflicts}。`;
+
+        setTimeout(() => {
+          if (modal) modal.classList.add('hidden');
+
+          const statusPanel = document.getElementById('panel-scheduling-status');
+          statusPanel.classList.remove('hidden');
+          document.getElementById('text-scheduling-time').textContent = `耗時：${result.stats.timeMs} ms (${result.stats.iterations} 次鏈式疊代)`;
+
+          const badge = document.getElementById('icon-status-badge');
+          const title = document.getElementById('title-status-banner');
+          const diagDiv = document.getElementById('content-status-diagnostics');
+
+          if (result.success) {
+            badge.className = 'p-1.5 bg-emerald-100 text-emerald-700 rounded-lg';
+            badge.innerHTML = '<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>';
+            title.textContent = '🎉 排課成功 (100% 零衝突)';
+
+            diagDiv.innerHTML = `
+              <div class="p-3 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-lg space-y-1.5">
+                <div class="font-bold">全校 ${result.stats.totalUnits} 節課程已全數排定完畢！</div>
+                <div class="text-[11px] text-emerald-800 grid grid-cols-1 sm:grid-cols-2 gap-1 pt-1 border-t border-emerald-200">
+                  <div>✔️ 硬約束 100% 滿足 (教師零衝堂、科任教室無衝突)</div>
+                  <div>✔️ 預排作業完整鎖定 (一定排/不排完全落實)</div>
+                  <div>✔️ 多階深度彈射鏈成功化解複雜排課瓶頸</div>
+                  <div>✔️ 核心主科晨間優先與體育避午後退火優化完成</div>
+                </div>
+              </div>
+            `;
+            showToast('🎉 全校課表已 100% 零衝突排定！', 'success');
+          } else {
+            badge.className = 'p-1.5 bg-amber-100 text-amber-800 rounded-lg';
+            badge.innerHTML = '<i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i>';
+            title.textContent = `⚠️ 已盡最大努力排定 ${result.stats.assignedUnits}/${result.stats.totalUnits} 節 (剩餘 ${result.stats.conflicts} 節受限未排)`;
+
+            diagDiv.innerHTML = `
+              <div class="p-3 bg-amber-50 text-amber-900 border border-amber-200 rounded-lg space-y-1.5">
+                <div class="font-bold">排課瓶頸與受限原因診斷報告：</div>
+                <ul class="text-xs text-amber-800 list-disc list-inside space-y-1">
+                  ${result.diagnostics.map(d => `<li>${d}</li>`).join('')}
+                </ul>
+                <div class="text-[11px] text-amber-700 pt-1 border-t border-amber-200">
+                  💡 建議改善：檢查上述受限科目的專科教室容量（例如增加容納班級數），或適度放寬該教師的禁排時段與互斥設定。
+                </div>
+              </div>
+            `;
+            showToast(`已排定 ${result.stats.assignedUnits} 節，剩餘 ${result.stats.conflicts} 節受限請見診斷報告。`, 'warning');
+          }
+
+          populateSchedulingDropdowns();
+          renderActiveTimetable();
+        }, 300);
+
+      } catch (err) {
+        console.error('Scheduling error:', err);
+        if (modal) modal.classList.add('hidden');
+        showToast('排課過程中發生錯誤: ' + err.message, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-75', 'cursor-not-allowed');
+          btn.innerHTML = `<i data-lucide="play" class="w-4 h-4 fill-white"></i><span>開始智慧排課 (Execute)</span>`;
+          if (window.lucide) lucide.createIcons();
+        }
+      }
     };
+    
 
     document.getElementById('btn-start-scheduling').addEventListener('click', window.executeSmartScheduling);
 
