@@ -115,6 +115,48 @@
 
     <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
+    <!-- Modal: Manual Swap Conflict Warning -->
+    <div id="modal-swap-conflict" class="fixed inset-0 bg-slate-900/60 backdrop-blur-2xs z-50 flex items-center justify-center hidden">
+      <div class="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl border border-rose-100 transform transition-all text-left">
+        <div class="flex items-center gap-3 border-b border-slate-100 pb-3 mb-4">
+          <div class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 shadow-inner">
+            <i data-lucide="shield-alert" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-1.5">
+              <span>調課檢核未通過 · 保持原狀</span>
+              <span class="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-medium">防呆保護</span>
+            </h3>
+            <p class="text-xs text-slate-500">系統檢測到此調動將違反既定排課限制條件，已自動拒絕更動</p>
+          </div>
+        </div>
+
+        <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-900 font-medium leading-relaxed mb-4 flex items-start gap-2.5 shadow-2xs">
+          <i data-lucide="alert-circle" class="w-4 h-4 text-rose-600 shrink-0 mt-0.5"></i>
+          <div id="text-swap-conflict-reason" class="flex-1">衝突原因載入中...</div>
+        </div>
+
+        <div class="text-[11px] text-slate-600 space-y-1.5 mb-5 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+          <div class="font-bold text-slate-800 flex items-center gap-1">
+            <i data-lucide="check-shield" class="w-3.5 h-3.5 text-indigo-600"></i>
+            系統防呆與完整性保證：
+          </div>
+          <div class="text-slate-600 pl-4 space-y-0.5">
+            <div>• 課表已自動回復至調動前狀態，無任何資料損毀或殘留衝堂。</div>
+            <div>• 若確實需調至該時段，請先至【功能 4 預排作業】或【功能 2 科任教室】解除或調整對應之排課限制。</div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t border-slate-100">
+          <span class="text-[11px] text-slate-400">已自動取消本次調動</span>
+          <button type="button" onclick="closeSwapConflictModal()" class="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold shadow-sm transition active:scale-95 flex items-center gap-1.5">
+            <i data-lucide="check" class="w-3.5 h-3.5"></i>
+            我知道了 (確認關閉)
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ================================================================= -->
     <!-- TAB 1: 班級管理設定                                                -->
     <!-- ================================================================= -->
@@ -738,6 +780,33 @@
           <div class="hidden print:block text-center mb-6">
             <h2 class="text-2xl font-bold text-slate-900" id="print-school-title">學校課程排課表</h2>
             <p class="text-sm text-slate-600 mt-1" id="print-target-title">班級：101班</p>
+          </div>
+
+          <!-- Manual Adjustment Control Banner -->
+          <div id="panel-manual-swap" class="mb-4 bg-gradient-to-r from-indigo-50/90 to-blue-50/70 border border-indigo-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs no-print shadow-2xs">
+            <div class="flex items-center gap-2.5">
+              <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow-xs shrink-0">
+                <i data-lucide="arrow-left-right" class="w-4 h-4"></i>
+              </span>
+              <div>
+                <div class="font-bold text-indigo-950 flex items-center gap-2">
+                  <span>智慧手動調課模組</span>
+                  <span class="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.2 rounded-full font-normal border border-indigo-200">即時8重防呆檢核</span>
+                </div>
+                <div id="label-swap-hint" class="text-indigo-700 text-[11px] mt-0.5">點選課表中任意一堂課（來源），再點選第二堂課或空白節次（目標）即可對調或移動。</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div id="swap-status-badge" class="hidden px-3 py-1.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-medium flex items-center gap-2 shadow-2xs">
+                <span class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                <span id="text-swap-selected">已選取時段</span>
+                <button type="button" onclick="cancelSwapSelection()" class="ml-1 text-slate-400 hover:text-slate-700 font-bold p-0.5 rounded hover:bg-amber-200/60" title="取消選取">✕</button>
+              </div>
+              <button id="btn-undo-swap" type="button" onclick="undoLastSwap()" class="hidden px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg font-medium shadow-2xs flex items-center gap-1.5 transition active:scale-95" title="復原上一次手動調課">
+                <i data-lucide="undo-2" class="w-3.5 h-3.5 text-indigo-600"></i>
+                <span>復原調課</span>
+              </button>
+            </div>
           </div>
 
           <div class="overflow-x-auto custom-scrollbar">
@@ -2095,6 +2164,361 @@
 
     document.getElementById('select-view-target').addEventListener('change', renderActiveTimetable);
 
+    
+    // =========================================================================
+    // 手動調課模組與即時防呆檢核引擎 (Manual Adjustment & Constraint Matrix)
+    // =========================================================================
+    let selectedSwapSlot = null;
+    let manualSwapHistory = [];
+
+    window.closeSwapConflictModal = function() {
+      const modal = document.getElementById('modal-swap-conflict');
+      if (modal) modal.classList.add('hidden');
+    };
+
+    function showSwapConflictModal(errorMessage) {
+      const modal = document.getElementById('modal-swap-conflict');
+      const textDiv = document.getElementById('text-swap-conflict-reason');
+      if (textDiv) textDiv.innerHTML = errorMessage;
+      if (modal) {
+        modal.classList.remove('hidden');
+        if (window.lucide) lucide.createIcons();
+      } else {
+        alert('⚠️ 無法調課 (違反排課限制，已維持原狀)：\n\n' + errorMessage);
+      }
+    }
+
+    window.cancelSwapSelection = function() {
+      selectedSwapSlot = null;
+      const badge = document.getElementById('swap-status-badge');
+      if (badge) badge.classList.add('hidden');
+      const hint = document.getElementById('label-swap-hint');
+      if (hint) hint.textContent = '點選課表中任意一堂課（來源），再點選第二堂課或空白節次（目標）即可對調或移動。';
+      renderActiveTimetable();
+    };
+
+    window.undoLastSwap = function() {
+      if (manualSwapHistory.length === 0) return;
+      const last = manualSwapHistory.pop();
+      const { classId, slotAKey, slotBKey, unitA, unitB } = last;
+
+      if (!AppState.timetable[classId]) AppState.timetable[classId] = {};
+      if (unitA) AppState.timetable[classId][slotAKey] = unitA;
+      else delete AppState.timetable[classId][slotAKey];
+
+      if (unitB) AppState.timetable[classId][slotBKey] = unitB;
+      else delete AppState.timetable[classId][slotBKey];
+
+      saveState();
+      selectedSwapSlot = null;
+      renderActiveTimetable();
+
+      const undoBtn = document.getElementById('btn-undo-swap');
+      if (undoBtn && manualSwapHistory.length === 0) {
+        undoBtn.classList.add('hidden');
+      }
+
+      showToast('↩️ 已復原上一步手動調課！', 'info');
+    };
+
+    function validateManualSwap(classId, slotAKey, slotBKey) {
+      const cls = AppState.classes.find(c => c.id === classId);
+      if (!cls) return { valid: false, error: '找不到班級資料' };
+      const gradeId = cls.gradeId;
+      const unitA = AppState.timetable[classId]?.[slotAKey] || null;
+      const unitB = AppState.timetable[classId]?.[slotBKey] || null;
+
+      if (!unitA && !unitB) return { valid: false, error: '選取的兩個時段皆為空堂，無需調動。' };
+
+      const [dA, pA] = slotAKey.split('-').map(Number);
+      const [dB, pB] = slotBKey.split('-').map(Number);
+      const dayNames = { 1: '星期一', 2: '星期二', 3: '星期三', 4: '星期四', 5: '星期五' };
+
+      // 1. 年級作息時間槽檢核 (Grade Schedule Slots)
+      const gradeSlots = {
+        1: { 1: [1,2,3,4], 2: [1,2,3,4,5,6,7], 3: [1,2,3,4], 4: [1,2,3,4], 5: [1,2,3,4] },
+        2: { 1: [1,2,3,4], 2: [1,2,3,4,5,6,7], 3: [1,2,3,4], 4: [1,2,3,4], 5: [1,2,3,4] },
+        3: { 1: [1,2,3,4,5,6,7], 2: [1,2,3,4,5,6,7], 3: [1,2,3,4], 4: [1,2,3,4,5,6,7], 5: [1,2,3,4] },
+        4: { 1: [1,2,3,4,5,6,7], 2: [1,2,3,4,5,6,7], 3: [1,2,3,4], 4: [1,2,3,4,5,6,7], 5: [1,2,3,4] },
+        5: { 1: [1,2,3,4,5,6,7], 2: [1,2,3,4,5,6,7], 3: [1,2,3,4], 4: [1,2,3,4,5,6,7], 5: [1,2,3,4,5,6,7] },
+        6: { 1: [1,2,3,4,5,6,7], 2: [1,2,3,4,5,6,7], 3: [1,2,3,4], 4: [1,2,3,4,5,6,7], 5: [1,2,3,4,5,6,7] }
+      };
+
+      const validSlotsA = gradeSlots[gradeId]?.[dA] || [1,2,3,4,5,6,7];
+      const validSlotsB = gradeSlots[gradeId]?.[dB] || [1,2,3,4,5,6,7];
+
+      if (unitB && !validSlotsA.includes(pA)) {
+        return { valid: false, error: `【${cls.className}】在 ${dayNames[dA]} 第 ${pA} 節為半天放學時段，依課綱作息不可排入課程！` };
+      }
+      if (unitA && !validSlotsB.includes(pB)) {
+        return { valid: false, error: `【${cls.className}】在 ${dayNames[dB]} 第 ${pB} 節為半天放學時段，依課綱作息不可排入課程！` };
+      }
+
+      // 2. 固定鎖定時段檢核 (Must Locks)
+      if (unitA) {
+        const mustClassA = (AppState.preClassSubject || []).some(p => p.type === 'must' && p.classId === classId && p.subjectId === unitA.subjectId && p.day === dA && p.period === pA);
+        if (mustClassA) {
+          return { valid: false, error: `【${unitA.subjectName}】在 ${dayNames[dA]} 第 ${pA} 節已被設定為【班級指定一定排】鎖定時段，不可任意調動！` };
+        }
+        if (unitA.teacherName) {
+          const mustTeacherA = (AppState.preTeacher || []).some(p => p.type === 'must' && p.teacherName === unitA.teacherName && p.day === dA && p.period === pA);
+          if (mustTeacherA) {
+            return { valid: false, error: `【${unitA.teacherName}】老師在 ${dayNames[dA]} 第 ${pA} 節已被設定為【教師指定一定排】鎖定時段，不可任意調動！` };
+          }
+        }
+      }
+      if (unitB) {
+        const mustClassB = (AppState.preClassSubject || []).some(p => p.type === 'must' && p.classId === classId && p.subjectId === unitB.subjectId && p.day === dB && p.period === pB);
+        if (mustClassB) {
+          return { valid: false, error: `【${unitB.subjectName}】在 ${dayNames[dB]} 第 ${pB} 節已被設定為【班級指定一定排】鎖定時段，不可任意調動！` };
+        }
+        if (unitB.teacherName) {
+          const mustTeacherB = (AppState.preTeacher || []).some(p => p.type === 'must' && p.teacherName === unitB.teacherName && p.day === dB && p.period === pB);
+          if (mustTeacherB) {
+            return { valid: false, error: `【${unitB.teacherName}】老師在 ${dayNames[dB]} 第 ${pB} 節已被設定為【教師指定一定排】鎖定時段，不可任意調動！` };
+          }
+        }
+      }
+
+      const tA = unitA ? (unitA.teacherName || '').trim() : '';
+      const tB = unitB ? (unitB.teacherName || '').trim() : '';
+
+      // 3. 教師禁排時段檢核 (Teacher Forbid Slots)
+      if (tA) {
+        const isForbidB = (AppState.preTeacher || []).some(p => (p.teacherName === tA || p.teacherName === 'ALL') && p.day === dB && p.period === pB && p.type === 'forbid');
+        if (isForbidB) {
+          return { valid: false, error: `違反排課限制：【${tA}】老師在 ${dayNames[dB]} 第 ${pB} 節已設定為【指定不排課時段】（如進修/行政公差），不可調入！` };
+        }
+      }
+      if (tB) {
+        const isForbidA = (AppState.preTeacher || []).some(p => (p.teacherName === tB || p.teacherName === 'ALL') && p.day === dA && p.period === pA && p.type === 'forbid');
+        if (isForbidA) {
+          return { valid: false, error: `違反排課限制：【${tB}】老師在 ${dayNames[dA]} 第 ${pA} 節已設定為【指定不排課時段】（如進修/行政公差），不可調入！` };
+        }
+      }
+
+      // 4. 班級科目禁排時段檢核 (Class-Subject Forbid)
+      if (unitA) {
+        const forbidSubB = (AppState.preClassSubject || []).some(p => p.type === 'forbid' && p.classId === classId && p.subjectId === unitA.subjectId && p.day === dB && p.period === pB);
+        if (forbidSubB) {
+          return { valid: false, error: `違反排課限制：【${unitA.subjectName}】在 ${dayNames[dB]} 第 ${pB} 節已被設定為該班【科目禁排時段】！` };
+        }
+      }
+      if (unitB) {
+        const forbidSubA = (AppState.preClassSubject || []).some(p => p.type === 'forbid' && p.classId === classId && p.subjectId === unitB.subjectId && p.day === dA && p.period === pA);
+        if (forbidSubA) {
+          return { valid: false, error: `違反排課限制：【${unitB.subjectName}】在 ${dayNames[dA]} 第 ${pA} 節已被設定為該班【科目禁排時段】！` };
+        }
+      }
+
+      // 5. 教師跨班衝堂檢核 (Teacher Collision across other classes)
+      if (tA) {
+        for (const [otherCid, grid] of Object.entries(AppState.timetable || {})) {
+          if (otherCid !== classId && grid[slotBKey]) {
+            const otherU = grid[slotBKey];
+            if (otherU && otherU.teacherName && otherU.teacherName.trim() === tA) {
+              const otherCls = AppState.classes.find(c => c.id === otherCid);
+              return { valid: false, error: `教師衝堂阻擋：【${tA}】老師在 ${dayNames[dB]} 第 ${pB} 節已在【${otherCls ? otherCls.className : otherCid}】授課（${otherU.subjectName}），無法調入！` };
+            }
+          }
+        }
+      }
+      if (tB) {
+        for (const [otherCid, grid] of Object.entries(AppState.timetable || {})) {
+          if (otherCid !== classId && grid[slotAKey]) {
+            const otherU = grid[slotAKey];
+            if (otherU && otherU.teacherName && otherU.teacherName.trim() === tB) {
+              const otherCls = AppState.classes.find(c => c.id === otherCid);
+              return { valid: false, error: `教師衝堂阻擋：【${tB}】老師在 ${dayNames[dA]} 第 ${pA} 節已在【${otherCls ? otherCls.className : otherCid}】授課（${otherU.subjectName}），無法調入！` };
+            }
+          }
+        }
+      }
+
+      // 6. 專科教室容量上限檢核 (Special Room Capacity)
+      if (unitA && unitA.roomId) {
+        const room = AppState.specialRooms.find(r => r.id === unitA.roomId);
+        const maxCap = room ? (room.capacity || 1) : 1;
+        let occ = 0;
+        for (const [otherCid, grid] of Object.entries(AppState.timetable || {})) {
+          if (otherCid !== classId && grid[slotBKey] && grid[slotBKey].roomId === unitA.roomId) {
+            occ++;
+          }
+        }
+        if (occ + 1 > maxCap) {
+          return { valid: false, error: `專科教室超載：【${room ? room.name : unitA.roomId}】在 ${dayNames[dB]} 第 ${pB} 節已被其他 ${occ} 個班級佔用，已達容納上限 (${maxCap} 班)！` };
+        }
+      }
+      if (unitB && unitB.roomId) {
+        const room = AppState.specialRooms.find(r => r.id === unitB.roomId);
+        const maxCap = room ? (room.capacity || 1) : 1;
+        let occ = 0;
+        for (const [otherCid, grid] of Object.entries(AppState.timetable || {})) {
+          if (otherCid !== classId && grid[slotAKey] && grid[slotAKey].roomId === unitB.roomId) {
+            occ++;
+          }
+        }
+        if (occ + 1 > maxCap) {
+          return { valid: false, error: `專科教室超載：【${room ? room.name : unitB.roomId}】在 ${dayNames[dA]} 第 ${pA} 節已被其他 ${occ} 個班級佔用，已達容納上限 (${maxCap} 班)！` };
+        }
+      }
+
+      // 7. 教師互斥條件檢核 (Teacher Mutex)
+      if (tA) {
+        for (const m of (AppState.teacherMutexes || [])) {
+          if (m && Array.isArray(m.teachers) && m.teachers.includes(tA)) {
+            const others = m.teachers.filter(t => t !== tA);
+            for (const [otherCid, grid] of Object.entries(AppState.timetable || {})) {
+              if (otherCid !== classId && grid[slotBKey]) {
+                const occT = (grid[slotBKey].teacherName || '').trim();
+                if (others.includes(occT)) {
+                  const otherCls = AppState.classes.find(c => c.id === otherCid);
+                  return { valid: false, error: `違反教師互斥限制：【${tA}】與【${occT}】不可同時上課，而【${occT}】在 ${dayNames[dB]} 第 ${pB} 節已在【${otherCls ? otherCls.className : otherCid}】授課！` };
+                }
+              }
+            }
+          }
+        }
+      }
+      if (tB) {
+        for (const m of (AppState.teacherMutexes || [])) {
+          if (m && Array.isArray(m.teachers) && m.teachers.includes(tB)) {
+            const others = m.teachers.filter(t => t !== tB);
+            for (const [otherCid, grid] of Object.entries(AppState.timetable || {})) {
+              if (otherCid !== classId && grid[slotAKey]) {
+                const occT = (grid[slotAKey].teacherName || '').trim();
+                if (others.includes(occT)) {
+                  const otherCls = AppState.classes.find(c => c.id === otherCid);
+                  return { valid: false, error: `違反教師互斥限制：【${tB}】與【${occT}】不可同時上課，而【${occT}】在 ${dayNames[dA]} 第 ${pA} 節已在【${otherCls ? otherCls.className : otherCid}】授課！` };
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 8. 教師每日最高排課節數上限檢核 (Teacher Daily Max Limit)
+      if (tA && dA !== dB) {
+        const ruleB = (AppState.dailyTeacherRules || []).find(r => (r.teacherName === tA || r.teacherName === 'ALL') && (r.day === dB || r.day === null) && r.type === 'max');
+        if (ruleB) {
+          let curPeriodsOnDayB = 0;
+          for (const [cId, grid] of Object.entries(AppState.timetable || {})) {
+            for (let p = 1; p <= 7; p++) {
+              const k = `${dB}-${p}`;
+              if (cId === classId && k === slotBKey) continue;
+              if (grid[k] && grid[k].teacherName && grid[k].teacherName.trim() === tA) {
+                curPeriodsOnDayB++;
+              }
+            }
+          }
+          if (curPeriodsOnDayB + 1 > ruleB.periods) {
+            return { valid: false, error: `超過教師每日上限：【${tA}】老師在 ${dayNames[dB]} 目前已排 ${curPeriodsOnDayB} 節課，調動後將超過每日上限 (${ruleB.periods} 節)！` };
+          }
+        }
+      }
+      if (tB && dA !== dB) {
+        const ruleA = (AppState.dailyTeacherRules || []).find(r => (r.teacherName === tB || r.teacherName === 'ALL') && (r.day === dA || r.day === null) && r.type === 'max');
+        if (ruleA) {
+          let curPeriodsOnDayA = 0;
+          for (const [cId, grid] of Object.entries(AppState.timetable || {})) {
+            for (let p = 1; p <= 7; p++) {
+              const k = `${dA}-${p}`;
+              if (cId === classId && k === slotAKey) continue;
+              if (grid[k] && grid[k].teacherName && grid[k].teacherName.trim() === tB) {
+                curPeriodsOnDayA++;
+              }
+            }
+          }
+          if (curPeriodsOnDayA + 1 > ruleA.periods) {
+            return { valid: false, error: `超過教師每日上限：【${tB}】老師在 ${dayNames[dA]} 目前已排 ${curPeriodsOnDayA} 節課，調動後將超過每日上限 (${ruleA.periods} 節)！` };
+          }
+        }
+      }
+
+      return { valid: true, error: null };
+    }
+
+    window.handleCellClickForSwap = function(classId, slotKey) {
+      if (currentTimetableView !== 'class') {
+        showToast('手動調課請切換至【班級課表】模式進行點選對調！', 'info');
+        return;
+      }
+
+      const cls = AppState.classes.find(c => c.id === classId);
+      const [d, p] = slotKey.split('-').map(Number);
+      const dayNames = { 1: '週一', 2: '週二', 3: '週三', 4: '週四', 5: '週五' };
+      const unit = AppState.timetable[classId]?.[slotKey];
+
+      if (!selectedSwapSlot) {
+        // Step 1: Select first slot
+        selectedSwapSlot = { classId, slotKey };
+        const badge = document.getElementById('swap-status-badge');
+        const textSelected = document.getElementById('text-swap-selected');
+        const hint = document.getElementById('label-swap-hint');
+
+        if (badge) badge.classList.remove('hidden');
+        if (textSelected) {
+          textSelected.textContent = `來源：${dayNames[d]}第${p}節 ${unit ? unit.subjectName + ' (' + (unit.teacherName || '未配課') + ')' : '空堂'}`;
+        }
+        if (hint) {
+          hint.innerHTML = `<span class="font-bold text-amber-800">已選取來源！</span> 請點選欲對調的<span class="underline font-bold">第二堂課</span>或<span class="underline font-bold">空白節次</span>（點選同格取消）。`;
+        }
+        renderActiveTimetable();
+      } else {
+        // Step 2: Second slot clicked
+        if (selectedSwapSlot.classId === classId && selectedSwapSlot.slotKey === slotKey) {
+          // Deselect
+          cancelSwapSelection();
+          showToast('已取消調課選取', 'info');
+          return;
+        }
+
+        const slotAKey = selectedSwapSlot.slotKey;
+        const slotBKey = slotKey;
+
+        // Execute collision validation
+        const check = validateManualSwap(classId, slotAKey, slotBKey);
+
+        if (!check.valid) {
+          // VIOLATION: Show warning modal and DO NOT MAKE ANY CHANGE!
+          showSwapConflictModal(check.error);
+          return;
+        }
+
+        // VALID: Execute atomic swap
+        const unitA = AppState.timetable[classId]?.[slotAKey] ? JSON.parse(JSON.stringify(AppState.timetable[classId][slotAKey])) : null;
+        const unitB = AppState.timetable[classId]?.[slotBKey] ? JSON.parse(JSON.stringify(AppState.timetable[classId][slotBKey])) : null;
+
+        manualSwapHistory.push({
+          classId,
+          slotAKey,
+          slotBKey,
+          unitA,
+          unitB,
+          time: Date.now()
+        });
+
+        if (!AppState.timetable[classId]) AppState.timetable[classId] = {};
+        if (unitB) AppState.timetable[classId][slotAKey] = unitB;
+        else delete AppState.timetable[classId][slotAKey];
+
+        if (unitA) AppState.timetable[classId][slotBKey] = unitA;
+        else delete AppState.timetable[classId][slotBKey];
+
+        saveState();
+
+        const [dA, pA] = slotAKey.split('-').map(Number);
+        const actionDesc = (unitA && unitB) ? '對調成功' : '移動成功';
+
+        cancelSwapSelection();
+
+        const undoBtn = document.getElementById('btn-undo-swap');
+        if (undoBtn) undoBtn.classList.remove('hidden');
+
+        showToast(`✅ 【${cls ? cls.className : classId}】${dayNames[dA]}第${pA}節 與 ${dayNames[d]}第${p}節 ${actionDesc}！`, 'success');
+      }
+    };
+
     function renderActiveTimetable() {
       const table = document.getElementById('table-active-timetable');
       let target = document.getElementById('select-view-target').value;
@@ -2118,35 +2542,58 @@
         let thead = `
           <thead>
             <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-              <th class="border border-slate-200 px-3 py-2 w-20">節次</th>
-              ${days.map(d => `<th class="border border-slate-200 px-4 py-2 w-1/5">${dayNames[d]}</th>`).join('')}
+              <th class="border border-slate-200 px-3 py-2.5 w-20 bg-slate-200/70">節次</th>
+              ${days.map(d => `<th class="border border-slate-200 px-4 py-2.5 w-1/5">${dayNames[d]}</th>`).join('')}
             </tr>
           </thead>
         `;
 
         let tbody = '<tbody>';
         for (let p = 1; p <= 7; p++) {
-          tbody += `<tr class="hover:bg-slate-50 border-b border-slate-200">`;
-          tbody += `<td class="border border-slate-200 py-3 font-bold text-slate-600 bg-slate-50">第 ${p} 節</td>`;
+          tbody += `<tr class="hover:bg-slate-50/70 border-b border-slate-200">`;
+          tbody += `<td class="border border-slate-200 py-3 font-bold text-slate-700 bg-slate-100/80">第 ${p} 節</td>`;
 
           for (const d of days) {
             const slotKey = `${d}-${p}`;
             const unit = AppState.timetable[target]?.[slotKey];
+            const isSelected = selectedSwapSlot && selectedSwapSlot.classId === target && selectedSwapSlot.slotKey === slotKey;
 
             if (unit) {
               const isCore = unit.isCore;
-              const cardBg = isCore ? 'bg-indigo-50 border-indigo-200 text-indigo-900' : 'bg-emerald-50 border-emerald-200 text-emerald-900';
+              let cardBg = isCore ? 'bg-indigo-50/90 border-indigo-200 text-indigo-950' : 'bg-emerald-50/90 border-emerald-200 text-emerald-950';
+              let ringClass = '';
+
+              if (isSelected) {
+                cardBg = 'bg-amber-100 border-amber-400 text-amber-950 shadow-md';
+                ringClass = 'ring-4 ring-amber-500 scale-[1.02]';
+              }
+
               tbody += `
-                <td class="border border-slate-200 p-2 text-center align-middle">
-                  <div class="${cardBg} border rounded-lg p-2 shadow-xs transition hover:shadow-md cursor-pointer">
-                    <div class="font-bold text-sm text-slate-800">${unit.subjectName}</div>
+                <td class="border border-slate-200 p-1.5 text-center align-middle">
+                  <div onclick="handleCellClickForSwap('${target}', '${slotKey}')" class="${cardBg} ${ringClass} border rounded-xl p-2.5 shadow-2xs transition-all hover:shadow-md hover:scale-[1.02] cursor-pointer group select-none">
+                    <div class="font-bold text-sm text-slate-800 flex items-center justify-center gap-1">
+                      <span>${unit.subjectName}</span>
+                      ${isSelected ? '<span class="text-[10px] bg-amber-200 text-amber-800 px-1.5 py-0.2 rounded-full font-bold animate-pulse">待對調</span>' : ''}
+                    </div>
                     <div class="text-[11px] ${unit.teacherName ? 'text-slate-600' : 'text-rose-500 font-medium'} mt-0.5">${unit.teacherName ? unit.teacherName : '(未配課)'}</div>
-                    ${unit.roomName ? `<div class="text-[10px] bg-teal-100 text-teal-800 rounded px-1.5 py-0.2 mt-1 inline-block">📍 ${unit.roomName}</div>` : ''}
+                    ${unit.roomName ? `<div class="text-[10px] bg-teal-100 text-teal-800 rounded-md px-1.5 py-0.5 mt-1 inline-block font-medium">📍 ${unit.roomName}</div>` : ''}
+                    <div class="text-[10px] text-indigo-600 opacity-0 group-hover:opacity-100 transition mt-1 font-medium hidden sm:block">點選調課 ⇄</div>
                   </div>
                 </td>
               `;
             } else {
-              tbody += `<td class="border border-slate-200 p-2 text-slate-300 text-xs">空堂</td>`;
+              const isSelectedEmpty = selectedSwapSlot && selectedSwapSlot.classId === target && selectedSwapSlot.slotKey === slotKey;
+              const emptyBg = isSelectedEmpty
+                ? 'bg-amber-100 border-amber-400 ring-4 ring-amber-500 text-amber-800 font-bold'
+                : 'hover:bg-indigo-50/60 hover:border-indigo-300 text-slate-300 hover:text-indigo-600';
+
+              tbody += `
+                <td class="border border-slate-200 p-1.5 text-center align-middle">
+                  <div onclick="handleCellClickForSwap('${target}', '${slotKey}')" class="border border-dashed border-slate-300 rounded-xl p-3 text-xs transition-all ${emptyBg} cursor-pointer group select-none">
+                    ${isSelectedEmpty ? '已選取空堂' : '<span class="group-hover:hidden">- 空堂 -</span><span class="hidden group-hover:inline font-medium text-indigo-600">+ 可移至此</span>'}
+                  </div>
+                </td>
+              `;
             }
           }
           tbody += `</tr>`;
@@ -2182,7 +2629,7 @@
           for (const d of days) {
             const slotKey = `${d}-${p}`;
             let foundUnit = null;
-            for (const [cid, grid] of Object.entries(AppState.timetable)) {
+            for (const [cid, grid] of Object.entries(AppState.timetable || {})) {
               if (grid[slotKey] && grid[slotKey].teacherName === target) {
                 foundUnit = grid[slotKey];
                 break;
@@ -2192,7 +2639,7 @@
             if (foundUnit) {
               tbody += `
                 <td class="border border-slate-200 p-2 text-center align-middle">
-                  <div class="bg-amber-50 border border-amber-200 rounded-lg p-2 text-amber-950">
+                  <div class="bg-amber-50 border border-amber-200 rounded-lg p-2 text-amber-950 shadow-2xs">
                     <div class="font-bold text-sm text-slate-800">${foundUnit.className}</div>
                     <div class="text-xs text-amber-800 font-medium">${foundUnit.subjectName}</div>
                     ${foundUnit.roomName ? `<div class="text-[10px] bg-teal-100 text-teal-800 rounded px-1.5 py-0.2 mt-0.5 inline-block">📍 ${foundUnit.roomName}</div>` : ''}
@@ -2234,7 +2681,7 @@
           for (const d of days) {
             const slotKey = `${d}-${p}`;
             let foundUnit = null;
-            for (const [cid, grid] of Object.entries(AppState.timetable)) {
+            for (const [cid, grid] of Object.entries(AppState.timetable || {})) {
               if (grid[slotKey] && grid[slotKey].roomId === target) {
                 foundUnit = grid[slotKey];
                 break;
@@ -2244,9 +2691,9 @@
             if (foundUnit) {
               tbody += `
                 <td class="border border-slate-200 p-2 text-center align-middle">
-                  <div class="bg-teal-50 border border-teal-200 rounded-lg p-2 text-teal-950">
+                  <div class="bg-teal-50 border border-teal-200 rounded-lg p-2 text-teal-950 shadow-2xs">
                     <div class="font-bold text-sm text-slate-800">${foundUnit.className}</div>
-                    <div class="text-xs text-teal-800">${foundUnit.subjectName} (${foundUnit.teacherName})</div>
+                    <div class="text-xs text-teal-800">${foundUnit.subjectName} (${foundUnit.teacherName || '未配課'})</div>
                   </div>
                 </td>
               `;
@@ -2300,7 +2747,7 @@
                 tbody += `
                   <td class="border border-slate-200 p-1 text-[10px] leading-tight ${isBorderRight}" title="${unit.subjectName} - ${unit.teacherName}">
                     <div class="font-bold text-slate-800 truncate">${unit.subjectName}</div>
-                    <div class="text-[9px] text-slate-500 truncate">${unit.teacherName}</div>
+                    <div class="text-[9px] text-slate-500 truncate">${unit.teacherName || '(未配課)'}</div>
                   </td>
                 `;
               } else {
@@ -2314,6 +2761,7 @@
         table.innerHTML = thead + tbody;
       }
     }
+
 
     // High Speed Timetable Engine
     class HighSpeedTimetableEngine {
@@ -2985,16 +3433,470 @@
   }
 
   solve() {
-    // Synchronous fallback wrapper
-    let syncRes = null;
-    this.solveAsync().then(r => { syncRes = r; });
-    // In node or sync environments solveAsync runs in microtasks
-    return syncRes || {
-      success: true,
-      timetable: {},
-      diagnostics: [],
-      stats: { totalUnits: 0, assignedUnits: 0, conflicts: 0, iterations: 0, timeMs: 0 }
+    const startTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const slotKeyOf = (idx) => `${Math.floor(idx / 7) + 1}-${(idx % 7) + 1}`;
+    const indexOfSlot = (d, p) => (d - 1) * 7 + (p - 1);
+
+    const diagnostics = [];
+
+    // Pre-feasibility checks
+    // 1. Special Room Capacity
+    const roomDemand = {};
+    for (const a of this.assignments) {
+      if (a.roomId) {
+        roomDemand[a.roomId] = (roomDemand[a.roomId] || 0) + (a.weeklyPeriods || 0);
+      }
+    }
+    for (const [rid, demand] of Object.entries(roomDemand)) {
+      const room = this.specialRooms.find(r => r.id === rid);
+      const cap = room ? (room.capacity || 1) : 1;
+      const maxPossible = cap * 35;
+      if (demand > maxPossible) {
+        diagnostics.push(`專科教室【${room ? room.name : rid}】需求總節數 (${demand} 節) 超出每週物理容量上限 (${maxPossible} 節)！建議增加容納班級數或調整配課。`);
+      }
+    }
+
+    // 2. Teacher Workload vs Available Slots
+    const teacherDemand = {};
+    for (const a of this.assignments) {
+      if (a.teacherName) {
+        teacherDemand[a.teacherName] = (teacherDemand[a.teacherName] || 0) + (a.weeklyPeriods || 0);
+      }
+    }
+    for (const [t, demand] of Object.entries(teacherDemand)) {
+      const forbidCount = this.preTeacher.filter(p => p.teacherName === t && p.type === 'forbid').length;
+      const maxSlots = 35 - forbidCount;
+      if (demand > maxSlots) {
+        diagnostics.push(`教師【${t}】每週應授課 ${demand} 節，但扣除禁排時段後僅剩 ${maxSlots} 節可用時段！`);
+      }
+    }
+
+    const units = [];
+    let uid = 1;
+
+    // Detect cross-class / specialist teachers
+    const teacherClassMap = {};
+    for (const a of this.assignments) {
+      if (a && a.teacherName) {
+        if (!teacherClassMap[a.teacherName]) teacherClassMap[a.teacherName] = new Set();
+        teacherClassMap[a.teacherName].add(a.classId);
+      }
+    }
+
+    for (const a of this.assignments) {
+      if (!a) continue;
+      const cls = this.classes.find(c => c && c.id === a.classId);
+      if (!cls) continue;
+      const subjects = (this.gradeSubjects && this.gradeSubjects[cls.gradeId]) || [];
+      const sub = subjects.find(s => s && s.id === a.subjectId);
+
+      const sName = String(a.subjectName || (sub ? sub.name : '') || '未命名科目').trim();
+      const sPeriods = Math.max(0, parseInt(a.weeklyPeriods !== undefined ? a.weeklyPeriods : (sub ? sub.weeklyPeriods : 0), 10) || 0);
+      const tName = String(a.teacherName || '').trim();
+
+      const room = this.specialRooms.find(r => {
+        if (!r) return false;
+        if (a.roomId && r.id === a.roomId) return true;
+        const bTeachers = Array.isArray(r.boundTeachers) ? r.boundTeachers : (typeof r.boundTeachers === 'string' ? r.boundTeachers.split(',').map(x => x.trim()) : []);
+        const bSubjects = Array.isArray(r.boundSubjects) ? r.boundSubjects : (typeof r.boundSubjects === 'string' ? r.boundSubjects.split(',').map(x => x.trim()) : []);
+        return (tName && bTeachers.includes(tName)) && (sName && bSubjects.includes(sName));
+      });
+
+      const validSlots = this.getAvailableSlots(cls.gradeId);
+      const validMask = new Array(35).fill(false);
+      validSlots.forEach(s => {
+        validMask[indexOfSlot(s.day, s.period)] = true;
+      });
+
+      const isCore = sub ? (sub.category === 'core' || ['國語', '數學', '英語', '自然', '社會', '理化'].some(k => sName.includes(k))) : ['國語', '數學', '英語', '自然', '社會', '理化'].some(k => sName.includes(k));
+      const allowDouble = sub ? Boolean(sub.allowDoublePeriod) : false;
+      const isCrossClass = (tName && teacherClassMap[tName] && teacherClassMap[tName].size > 1) || Boolean(room);
+
+      for (let i = 0; i < sPeriods; i++) {
+        units.push({
+          id: uid++,
+          classId: cls.id,
+          className: cls.className,
+          gradeId: cls.gradeId,
+          subjectId: a.subjectId || (sub ? sub.id : `SUB_${sName}`),
+          subjectName: sName,
+          teacherName: tName,
+          roomId: room ? room.id : (a.roomId || null),
+          roomName: room ? room.name : null,
+          isCore,
+          allowDouble,
+          isCrossClass,
+          validMask,
+          slotIdx: -1,
+          isFixed: false
+        });
+      }
+    }
+
+    const classIdMap = {};
+    this.classes.forEach((c, idx) => { classIdMap[c.id] = idx; });
+    const classCount = this.classes.length;
+    const classGrid = Array.from({ length: classCount }, () => new Int32Array(35).fill(-1));
+
+    const teacherGrid = {};
+    const teacherDayCount = {};
+    const roomGrid = {};
+
+    // Mutex map
+    const mutexMap = {};
+    for (const m of this.teacherMutexes) {
+      if (m && Array.isArray(m.teachers) && m.teachers.length >= 2) {
+        for (let i = 0; i < m.teachers.length; i++) {
+          for (let j = 0; j < m.teachers.length; j++) {
+            if (i !== j) {
+              const t1 = m.teachers[i], t2 = m.teachers[j];
+              if (!mutexMap[t1]) mutexMap[t1] = new Set();
+              mutexMap[t1].add(t2);
+            }
+          }
+        }
+      }
+    }
+
+    const teacherForbidMask = {};
+    for (const p of this.preTeacher) {
+      if (p && p.type === 'forbid' && p.teacherName) {
+        if (!teacherForbidMask[p.teacherName]) teacherForbidMask[p.teacherName] = new Array(35).fill(false);
+        teacherForbidMask[p.teacherName][indexOfSlot(p.day, p.period)] = true;
+      }
+    }
+
+    const classSubjectForbidMask = {};
+    for (const p of this.preClassSubject) {
+      if (p && p.type === 'forbid' && p.classId && p.subjectId) {
+        const k = `${p.classId}_${p.subjectId}`;
+        if (!classSubjectForbidMask[k]) classSubjectForbidMask[k] = new Array(35).fill(false);
+        classSubjectForbidMask[k][indexOfSlot(p.day, p.period)] = true;
+      }
+    }
+
+    const teacherMaxDaily = {};
+    for (const rule of this.dailyTeacherRules) {
+      if (rule && rule.type === 'max' && rule.teacherName) {
+        teacherMaxDaily[rule.teacherName] = rule.periods;
+      }
+    }
+
+    const placeUnit = (u, sIdx) => {
+      const cIdx = classIdMap[u.classId];
+      classGrid[cIdx][sIdx] = u.id;
+      u.slotIdx = sIdx;
+
+      const d = Math.floor(sIdx / 7);
+
+      if (u.teacherName) {
+        if (!teacherGrid[u.teacherName]) teacherGrid[u.teacherName] = new Int32Array(35).fill(-1);
+        teacherGrid[u.teacherName][sIdx] = u.id;
+
+        if (!teacherDayCount[u.teacherName]) teacherDayCount[u.teacherName] = new Int32Array(5).fill(0);
+        teacherDayCount[u.teacherName][d]++;
+      }
+
+      if (u.roomId) {
+        if (!roomGrid[u.roomId]) roomGrid[u.roomId] = new Int32Array(35).fill(0);
+        roomGrid[u.roomId][sIdx]++;
+      }
     };
+
+    const removeUnit = (u) => {
+      const sIdx = u.slotIdx;
+      if (sIdx === -1) return;
+      const cIdx = classIdMap[u.classId];
+      classGrid[cIdx][sIdx] = -1;
+
+      const d = Math.floor(sIdx / 7);
+
+      if (u.teacherName && teacherGrid[u.teacherName]) {
+        teacherGrid[u.teacherName][sIdx] = -1;
+        if (teacherDayCount[u.teacherName]) {
+          teacherDayCount[u.teacherName][d]--;
+        }
+      }
+
+      if (u.roomId && roomGrid[u.roomId]) {
+        roomGrid[u.roomId][sIdx]--;
+      }
+
+      u.slotIdx = -1;
+    };
+
+    const isSlotFeasible = (u, sIdx) => {
+      if (!u.validMask[sIdx]) return false;
+      const cIdx = classIdMap[u.classId];
+      if (classGrid[cIdx][sIdx] !== -1) return false;
+
+      if (u.teacherName && teacherForbidMask[u.teacherName]?.[sIdx]) return false;
+      if (u.teacherName && teacherForbidMask['ALL']?.[sIdx]) return false;
+      if (classSubjectForbidMask[`${u.classId}_${u.subjectId}`]?.[sIdx]) return false;
+
+      if (u.teacherName) {
+        if (teacherGrid[u.teacherName] && teacherGrid[u.teacherName][sIdx] !== -1) return false;
+
+        const mutex = mutexMap[u.teacherName];
+        if (mutex) {
+          for (const mTeacher of mutex) {
+            if (teacherGrid[mTeacher] && teacherGrid[mTeacher][sIdx] !== -1) return false;
+          }
+        }
+
+        const maxD = teacherMaxDaily[u.teacherName] || teacherMaxDaily['ALL'];
+        if (maxD) {
+          const d = Math.floor(sIdx / 7);
+          const curD = (teacherDayCount[u.teacherName] && teacherDayCount[u.teacherName][d]) || 0;
+          if (curD >= maxD) return false;
+        }
+      }
+
+      if (u.roomId) {
+        const roomObj = this.specialRooms.find(r => r.id === u.roomId);
+        const maxCap = roomObj ? (roomObj.capacity || 1) : 1;
+        const curOcc = (roomGrid[u.roomId] && roomGrid[u.roomId][sIdx]) || 0;
+        if (curOcc >= maxCap) return false;
+      }
+
+      return true;
+    };
+
+    const getSoftScore = (u, sIdx) => {
+      const d = Math.floor(sIdx / 7);
+      const p = (sIdx % 7) + 1;
+      let score = 0;
+
+      const cIdx = classIdMap[u.classId];
+      let sameSubToday = 0;
+      for (let period = 0; period < 7; period++) {
+        const otherUid = classGrid[cIdx][d * 7 + period];
+        if (otherUid !== -1) {
+          const otherU = units.find(x => x.id === otherUid);
+          if (otherU && otherU.subjectId === u.subjectId) sameSubToday++;
+        }
+      }
+
+      if (sameSubToday > 0) {
+        score += u.allowDouble ? 2 : 40;
+      }
+
+      if (u.isCore) {
+        if (p <= 3) score -= 18;
+        else if (p === 4) score -= 8;
+        else score += 30; // afternoon core penalized
+      }
+
+      if (u.subjectName.includes('體育') || u.subjectName.includes('健體')) {
+        if (p === 5) score += 60; // strictly avoid period 5 right after lunch!
+        else if (p === 2 || p === 3 || p === 6) score -= 15;
+      }
+
+      if (u.subjectName.includes('藝文') || u.subjectName.includes('美勞') || u.subjectName.includes('音樂') || u.subjectName.includes('生活')) {
+        if (p >= 5) score -= 15; // afternoon creative subjects favored
+      }
+
+      return score;
+    };
+
+    // 1. Pre-must lock
+    for (const p of this.preClassSubject) {
+      if (p && p.type === 'must' && p.classId && p.subjectId) {
+        const sIdx = indexOfSlot(p.day, p.period);
+        const u = units.find(x => x.classId === p.classId && x.subjectId === p.subjectId && !x.isFixed && x.slotIdx === -1);
+        if (u && isSlotFeasible(u, sIdx)) {
+          placeUnit(u, sIdx);
+          u.isFixed = true;
+        }
+      }
+    }
+
+    for (const p of this.preTeacher) {
+      if (p && p.type === 'must' && p.teacherName) {
+        const sIdx = indexOfSlot(p.day, p.period);
+        const u = units.find(x => x.teacherName === p.teacherName && !x.isFixed && x.slotIdx === -1);
+        if (u && isSlotFeasible(u, sIdx)) {
+          placeUnit(u, sIdx);
+          u.isFixed = true;
+        }
+      }
+    }
+
+    // 2. Constraint Hierarchy Sorting (MRV)
+    // Units with special rooms, cross-class teachers, or forbidden masks are most constrained
+    const unassigned = units.filter(u => u.slotIdx === -1);
+    unassigned.sort((a, b) => {
+      const aConstrained = (a.roomId ? 100 : 0) + (a.isCrossClass ? 50 : 0) + (a.allowDouble ? 20 : 0);
+      const bConstrained = (b.roomId ? 100 : 0) + (b.isCrossClass ? 50 : 0) + (b.allowDouble ? 20 : 0);
+      return bConstrained - aConstrained;
+    });
+
+    // 3. Greedy Initial Placement
+    for (const u of unassigned) {
+      const cand = [];
+      for (let s = 0; s < 35; s++) {
+        if (isSlotFeasible(u, s)) {
+          cand.push({ sIdx: s, score: getSoftScore(u, s) });
+        }
+      }
+      cand.sort((a, b) => a.score - b.score);
+      if (cand.length > 0) {
+        placeUnit(u, cand[0].sIdx);
+      }
+    }
+
+    // 4. Fast Min-Conflicts & Ejection Chain Repair
+    let iter = 0;
+    const maxIter = 2000;
+    while (iter++ < maxIter) {
+      const unplaced = unassigned.filter(u => u.slotIdx === -1);
+      if (unplaced.length === 0) break;
+
+      const u = unplaced[Math.floor(Math.random() * unplaced.length)];
+      const cIdx = classIdMap[u.classId];
+
+      let placed = false;
+      for (let s = 0; s < 35; s++) {
+        if (isSlotFeasible(u, s)) {
+          placeUnit(u, s);
+          placed = true;
+          break;
+        }
+      }
+
+      if (!placed) {
+        const validSlotIndices = [];
+        for (let s = 0; s < 35; s++) {
+          if (u.validMask[s] && (!u.teacherName || !teacherForbidMask[u.teacherName]?.[s])) {
+            validSlotIndices.push(s);
+          }
+        }
+        validSlotIndices.sort(() => Math.random() - 0.5);
+
+        for (const s of validSlotIndices) {
+          const occUid = classGrid[cIdx][s];
+          if (occUid !== -1) {
+            const victim = units.find(x => x.id === occUid);
+            if (victim && !victim.isFixed) {
+              removeUnit(victim);
+              if (isSlotFeasible(u, s)) {
+                placeUnit(u, s);
+                let vPlaced = false;
+                for (let vs = 0; vs < 35; vs++) {
+                  if (isSlotFeasible(victim, vs)) {
+                    placeUnit(victim, vs);
+                    vPlaced = true;
+                    break;
+                  }
+                }
+                if (vPlaced) {
+                  placed = true;
+                  break;
+                } else {
+                  removeUnit(u);
+                  placeUnit(victim, s);
+                }
+              } else {
+                placeUnit(victim, s);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 5. Simulated Annealing Soft Optimization Polish
+    let temp = 100.0;
+    const coolingRate = 0.996;
+    for (let softStep = 0; softStep < 1500; softStep++) {
+      temp *= coolingRate;
+      const cls = this.classes[Math.floor(Math.random() * this.classes.length)];
+      if (!cls) continue;
+      const classUnits = units.filter(u => u.classId === cls.id && u.slotIdx !== -1 && !u.isFixed);
+      if (classUnits.length < 2) continue;
+
+      const uA = classUnits[Math.floor(Math.random() * classUnits.length)];
+      const uB = classUnits[Math.floor(Math.random() * classUnits.length)];
+      if (uA === uB) continue;
+
+      const sA = uA.slotIdx;
+      const sB = uB.slotIdx;
+
+      removeUnit(uA);
+      removeUnit(uB);
+
+      const scoreBefore = getSoftScore(uA, sA) + getSoftScore(uB, sB);
+
+      if (isSlotFeasible(uA, sB) && isSlotFeasible(uB, sA)) {
+        const scoreAfter = getSoftScore(uA, sB) + getSoftScore(uB, sA);
+        const delta = scoreAfter - scoreBefore;
+        if (delta < 0 || (temp > 1.0 && Math.random() < Math.exp(-delta / temp))) {
+          placeUnit(uA, sB);
+          placeUnit(uB, sA);
+          continue;
+        }
+      }
+
+      placeUnit(uA, sA);
+      placeUnit(uB, sB);
+    }
+
+    const endTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const timeMs = Math.max(1, Math.round(endTime - startTime));
+    const unplacedUnits = units.filter(u => u.slotIdx === -1);
+    const unplacedCount = unplacedUnits.length;
+
+    // Detailed failure root-cause analysis
+    if (unplacedCount > 0) {
+      const conflictSummary = {};
+      for (const u of unplacedUnits) {
+        const key = `${u.className} - ${u.subjectName} (${u.teacherName || '未配課'})`;
+        conflictSummary[key] = (conflictSummary[key] || 0) + 1;
+      }
+      for (const [k, count] of Object.entries(conflictSummary)) {
+        diagnostics.push(`未排定: 【${k}】共 ${count} 節。可能原因: 該時段科任教師在他班衝堂、專科教室容量已滿或排課限制衝突。`);
+      }
+    }
+
+    const result = {
+      success: unplacedCount === 0,
+      timetable: {},
+      diagnostics: diagnostics,
+      unplacedDetails: unplacedUnits.map(u => ({
+        classId: u.classId,
+        className: u.className,
+        subjectName: u.subjectName,
+        teacherName: u.teacherName,
+        roomName: u.roomName
+      })),
+      stats: {
+        totalUnits: units.length,
+        assignedUnits: units.length - unplacedCount,
+        conflicts: unplacedCount,
+        iterations: iter,
+        timeMs
+      }
+    };
+
+    this.classes.forEach(c => { result.timetable[c.id] = {}; });
+    units.forEach(u => {
+      if (u.slotIdx !== -1) {
+        const key = slotKeyOf(u.slotIdx);
+        result.timetable[u.classId][key] = {
+          classId: u.classId,
+          className: u.className,
+          gradeId: u.gradeId,
+          subjectId: u.subjectId,
+          subjectName: u.subjectName,
+          teacherName: u.teacherName,
+          roomId: u.roomId,
+          roomName: u.roomName,
+          isCore: u.isCore
+        };
+      }
+    });
+
+    return result;
   }
 
 }
