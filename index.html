@@ -1,0 +1,3650 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>校園智慧排課系統 | School Timetable Pro</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS (xlsx.full.min.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Noto Sans TC', system-ui, -apple-system, sans-serif; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    @media print {
+      body * { visibility: hidden; }
+      #print-area, #print-area * { visibility: visible; }
+      #print-area { position: absolute; left: 0; top: 0; width: 100%; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- Top Navigation Bar -->
+  <header class="bg-indigo-900 text-white shadow-lg sticky top-0 z-50 no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center space-x-3">
+          <div class="bg-indigo-700 p-2 rounded-lg text-indigo-200">
+            <i data-lucide="calendar-check" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+              校園智慧排課系統
+              <span class="text-xs bg-indigo-800 text-indigo-300 px-2 py-0.5 rounded-full font-normal border border-indigo-700">各年級獨立科目設定版</span>
+            </h1>
+            <p class="text-xs text-indigo-300">各年級獨立科目與節數 · Excel連動 · 科學排課演算法 · 雲端免安裝</p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button id="btn-load-demo" class="px-3 py-1.5 text-xs bg-indigo-800 hover:bg-indigo-700 text-indigo-100 rounded-md transition flex items-center gap-1.5 border border-indigo-600">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i>
+            載入示範資料
+          </button>
+          <button id="btn-export-json" class="px-3 py-1.5 text-xs bg-indigo-800 hover:bg-indigo-700 text-indigo-100 rounded-md transition flex items-center gap-1.5 border border-indigo-600">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            備份專案
+          </button>
+          <label class="px-3 py-1.5 text-xs bg-indigo-800 hover:bg-indigo-700 text-indigo-100 rounded-md transition flex items-center gap-1.5 border border-indigo-600 cursor-pointer">
+            <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+            還原專案
+            <input type="file" id="input-import-json" accept=".json" class="hidden">
+          </label>
+          <button id="btn-reset-data" class="px-2.5 py-1.5 text-xs bg-rose-900/60 hover:bg-rose-800 text-rose-200 rounded-md transition flex items-center gap-1 border border-rose-700" title="清空所有資料">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="bg-indigo-950/80 border-t border-indigo-800/60">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-1 sm:space-x-4 overflow-x-auto py-2">
+        <button class="nav-tab active flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition text-white bg-indigo-600 shadow" data-tab="tab-classes">
+          <i data-lucide="school" class="w-4 h-4"></i>
+          1. 班級管理設定
+        </button>
+        <button class="nav-tab flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition text-indigo-300 hover:text-white hover:bg-indigo-900" data-tab="tab-subjects-rooms">
+          <i data-lucide="book-open" class="w-4 h-4"></i>
+          2. 各年級科目與科任教室
+        </button>
+        <button class="nav-tab flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition text-indigo-300 hover:text-white hover:bg-indigo-900" data-tab="tab-assignments">
+          <i data-lucide="users" class="w-4 h-4"></i>
+          3. 各班任教老師配課
+        </button>
+        <button class="nav-tab flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition text-indigo-300 hover:text-white hover:bg-indigo-900" data-tab="tab-scheduling">
+          <i data-lucide="layout-grid" class="w-4 h-4"></i>
+          4. 排課作業與課表
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+    
+    <!-- Scheduling Progress Modal -->
+    <div id="modal-scheduling-progress" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center hidden">
+      <div class="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl border border-slate-100 transform transition-all text-center">
+        <div class="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+          <i data-lucide="cpu" class="w-8 h-8"></i>
+        </div>
+        <h3 class="text-lg font-bold text-slate-900 mb-1" id="modal-progress-title">智慧排課演算法運算中...</h3>
+        <p class="text-xs text-slate-500 mb-4" id="modal-progress-desc">正在進行 CSP 約束傳播與 Min-Conflicts 衝突消除</p>
+        
+        <div class="w-full bg-slate-100 rounded-full h-3 mb-3 overflow-hidden">
+          <div id="modal-progress-bar" class="bg-gradient-to-r from-indigo-600 to-emerald-500 h-3 rounded-full transition-all duration-300 w-1/3 animate-pulse"></div>
+        </div>
+        
+        <div class="text-[11px] text-indigo-600 font-medium" id="modal-progress-detail">正在初始化全校班級與各年級科目配課...</div>
+        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-center">
+          <button id="btn-abort-scheduling" type="button" class="px-3.5 py-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 rounded-lg text-xs font-medium transition border border-slate-300 flex items-center gap-1.5">
+            <i data-lucide="square" class="w-3.5 h-3.5 text-rose-500"></i>
+            中斷搜尋並套用當前最佳解
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <!-- Modal: Manual Swap Conflict Warning -->
+    <div id="modal-swap-conflict" class="fixed inset-0 bg-slate-900/60 backdrop-blur-2xs z-50 flex items-center justify-center hidden">
+      <div class="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl border border-rose-100 transform transition-all text-left">
+        <div class="flex items-center gap-3 border-b border-slate-100 pb-3 mb-4">
+          <div class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 shadow-inner">
+            <i data-lucide="shield-alert" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-1.5">
+              <span>調課檢核未通過 · 保持原狀</span>
+              <span class="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-medium">防呆保護</span>
+            </h3>
+            <p class="text-xs text-slate-500">系統檢測到此調動將違反既定排課限制條件，已自動拒絕更動</p>
+          </div>
+        </div>
+
+        <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-900 font-medium leading-relaxed mb-4 flex items-start gap-2.5 shadow-2xs">
+          <i data-lucide="alert-circle" class="w-4 h-4 text-rose-600 shrink-0 mt-0.5"></i>
+          <div id="text-swap-conflict-reason" class="flex-1">衝突原因載入中...</div>
+        </div>
+
+        <div class="text-[11px] text-slate-600 space-y-1.5 mb-5 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+          <div class="font-bold text-slate-800 flex items-center gap-1">
+            <i data-lucide="check-shield" class="w-3.5 h-3.5 text-indigo-600"></i>
+            系統防呆與完整性保證：
+          </div>
+          <div class="text-slate-600 pl-4 space-y-0.5">
+            <div>• 課表已自動回復至調動前狀態，無任何資料損毀或殘留衝堂。</div>
+            <div>• 若確實需調至該時段，請先至【功能 4 預排作業】或【功能 2 科任教室】解除或調整對應之排課限制。</div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t border-slate-100">
+          <span class="text-[11px] text-slate-400">已自動取消本次調動</span>
+          <button type="button" onclick="closeSwapConflictModal()" class="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold shadow-sm transition active:scale-95 flex items-center gap-1.5">
+            <i data-lucide="check" class="w-3.5 h-3.5"></i>
+            我知道了 (確認關閉)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 1: 班級管理設定 -->
+    <section id="tab-classes" class="tab-content block space-y-6">
+      <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <span class="p-2 bg-blue-100 text-blue-700 rounded-lg"><i data-lucide="school" class="w-5 h-5"></i></span>
+            功能 1：班級管理設定
+          </h2>
+          <p class="text-sm text-slate-500 mt-1">管理學校各年級與班級資料，支援 Excel 批次匯入/匯出與快速批次生成。</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="btn-download-class-template" class="px-3.5 py-2 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition flex items-center gap-1.5 border border-slate-300">
+            <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-600"></i>
+            下載班級 Excel 範本
+          </button>
+          <label class="px-3.5 py-2 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition flex items-center gap-1.5 shadow-sm cursor-pointer">
+            <i data-lucide="file-up" class="w-4 h-4"></i>
+            上傳班級 Excel 檔
+            <input type="file" id="input-upload-classes-excel" accept=".xlsx, .xls, .csv" class="hidden">
+          </label>
+          <button id="btn-export-classes-excel" class="px-3.5 py-2 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="file-down" class="w-4 h-4"></i>
+            匯出目前班級清單
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+          <h3 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+            <i data-lucide="plus-circle" class="w-4 h-4 text-blue-600"></i>
+            新增單一班級
+          </h3>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">所屬年級</label>
+              <select id="select-new-class-grade" class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <option value="1">一年級</option>
+                <option value="2">二年級</option>
+                <option value="3">三年級</option>
+                <option value="4">四年級</option>
+                <option value="5">五年級</option>
+                <option value="6">六年級</option>
+                <option value="7">七年級 / 國一</option>
+                <option value="8">八年級 / 國二</option>
+                <option value="9">九年級 / 國三</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">班級名稱 (如: 101班, 一年甲班)</label>
+              <input type="text" id="input-new-class-name" placeholder="例如: 101班" class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <button id="btn-add-single-class" class="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition flex items-center justify-center gap-1">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              加入班級清單
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+          <h3 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+            <i data-lucide="wand-2" class="w-4 h-4 text-purple-600"></i>
+            智慧批次生成班級
+          </h3>
+          <div class="space-y-3">
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1">年級範圍</label>
+                <select id="select-batch-grades" class="w-full text-sm border border-slate-300 rounded-lg px-2.5 py-2 bg-slate-50">
+                  <option value="1-6">1 ~ 6 年級 (國小)</option>
+                  <option value="1-3">1 ~ 3 年級</option>
+                  <option value="4-6">4 ~ 6 年級</option>
+                  <option value="7-9">7 ~ 9 年級 (國中)</option>
+                  <option value="1-1">僅 1 年級</option>
+                  <option value="2-2">僅 2 年級</option>
+                  <option value="3-3">僅 3 年級</option>
+                  <option value="4-4">僅 4 年級</option>
+                  <option value="5-5">僅 5 年級</option>
+                  <option value="6-6">僅 6 年級</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1">各年級班級數</label>
+                <input type="number" id="input-batch-count" min="1" max="15" value="2" class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2">
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">班級命名格式</label>
+              <select id="select-batch-naming" class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 bg-slate-50">
+                <option value="num">三位數字 (101, 102, 201...)</option>
+                <option value="chinese">國字序號 (一年1班, 一年2班...)</option>
+                <option value="letter">天干序號 (一年甲班, 一年乙班...)</option>
+              </select>
+            </div>
+            <button id="btn-generate-batch-classes" class="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg transition flex items-center justify-center gap-1">
+              <i data-lucide="layers" class="w-4 h-4"></i>
+              一鍵批次建立
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-gradient-to-br from-indigo-50 to-blue-50 p-5 rounded-xl border border-indigo-100 flex flex-col justify-between">
+          <div>
+            <h3 class="text-sm font-semibold text-indigo-900 mb-2 flex items-center gap-2">
+              <i data-lucide="info" class="w-4 h-4 text-indigo-600"></i>
+              全校班級統計概況
+            </h3>
+            <div class="grid grid-cols-2 gap-3 mt-4">
+              <div class="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm text-center">
+                <div class="text-2xl font-bold text-indigo-700" id="stat-total-classes">0</div>
+                <div class="text-xs text-slate-500 mt-0.5">總班級數</div>
+              </div>
+              <div class="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm text-center">
+                <div class="text-2xl font-bold text-blue-700" id="stat-total-grades">0</div>
+                <div class="text-xs text-slate-500 mt-0.5">涵蓋年級數</div>
+              </div>
+            </div>
+          </div>
+          <div class="text-xs text-indigo-600 bg-indigo-100/60 p-2.5 rounded-lg mt-4 flex items-center gap-2">
+            <i data-lucide="check-circle-2" class="w-4 h-4 text-indigo-600 flex-shrink-0"></i>
+            <span>提示：班級建立後，請至「功能 2」設定該年級科目，並至「功能 3」配置教師。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <h3 class="font-semibold text-slate-800 text-sm">現有班級清單</h3>
+            <div class="flex gap-1 flex-wrap" id="grade-filter-pills"></div>
+          </div>
+          <button id="btn-clear-all-classes" class="text-xs text-rose-600 hover:text-rose-800 font-medium transition">清空所有班級</button>
+        </div>
+        <div class="overflow-x-auto custom-scrollbar">
+          <table class="w-full text-sm text-left text-slate-600">
+            <thead class="text-xs text-slate-700 uppercase bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th scope="col" class="px-6 py-3 w-20">序號</th>
+                <th scope="col" class="px-6 py-3 w-32">年級</th>
+                <th scope="col" class="px-6 py-3">班級名稱</th>
+                <th scope="col" class="px-6 py-3 w-40 text-center">操作</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-classes" class="divide-y divide-slate-200"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: 各年級科目與科任教室設定 -->
+    <section id="tab-subjects-rooms" class="tab-content hidden space-y-6">
+      <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+          <span class="p-2 bg-emerald-100 text-emerald-700 rounded-lg"><i data-lucide="book-open" class="w-5 h-5"></i></span>
+          功能 2：各年級科目與科任教室設定
+        </h2>
+        <p class="text-sm text-slate-500 mt-1">
+          <strong>【重要功能】</strong> 每個年級皆可<strong>獨立設定各自的科目名稱、節數與屬性</strong>。
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 space-y-4">
+          <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-slate-100 pb-3">
+              <div class="flex items-center gap-2">
+                <i data-lucide="layers" class="w-4 h-4 text-emerald-600"></i>
+                <h3 class="font-semibold text-slate-800 text-sm">選擇要設定的年級：</h3>
+              </div>
+              <div class="flex gap-1 bg-slate-100 p-1 rounded-lg flex-wrap" id="subject-grade-tabs"></div>
+            </div>
+
+            <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-emerald-800">
+              <span id="label-current-grade-summary">一年級目前每週應排總節數：<strong>0</strong> 節 (每週上限 35 節)</span>
+              
+              <div class="flex items-center gap-1.5">
+                <span>複製本年級科目至：</span>
+                <select id="select-copy-target-grade" class="border border-emerald-300 rounded px-1.5 py-0.5 bg-white text-emerald-900 text-xs">
+                  <option value="ALL">所有其他年級</option>
+                </select>
+                <button id="btn-copy-grade-subjects" class="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-medium">複製</button>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto custom-scrollbar">
+              <table class="w-full text-xs text-left">
+                <thead class="text-slate-600 uppercase bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th class="px-3 py-2">科目名稱</th>
+                    <th class="px-3 py-2 w-24 text-center">每週節數</th>
+                    <th class="px-3 py-2 w-28">科目性質</th>
+                    <th class="px-3 py-2 w-20 text-center">允許連堂</th>
+                    <th class="px-3 py-2 w-16 text-center">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-grade-subjects" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
+              <input type="text" id="input-new-subject-name" placeholder="新增科目 (如: 生活, 閱讀, 理化)" class="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 flex-1 min-w-[120px] focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+              <div class="flex items-center gap-1">
+                <span class="text-[11px] text-slate-500">每週:</span>
+                <input type="number" id="input-new-subject-periods" min="1" max="10" value="2" class="text-xs border border-slate-300 rounded-lg px-2 py-1.5 w-14 text-center font-bold" title="每週節數">
+                <span class="text-[11px] text-slate-500">節</span>
+              </div>
+              <select id="select-new-subject-category" class="text-xs border border-slate-300 rounded-lg px-2 py-1.5 bg-slate-50">
+                <option value="core">核心主科 (國/數/英/自/社)</option>
+                <option value="dynamic">藝能動態 (生活/體/音/美/資)</option>
+                <option value="general">一般/彈性/校訂/綜合</option>
+              </select>
+              <button id="btn-add-subject" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition flex items-center gap-1">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                新增至本年級
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="lg:col-span-5 space-y-4">
+          <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+            <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+              <div class="flex items-center gap-2">
+                <i data-lucide="door-open" class="w-4 h-4 text-teal-600"></i>
+                <h3 class="font-semibold text-slate-800 text-sm">科任教室與專屬教師/科目綁定</h3>
+              </div>
+            </div>
+            <p class="text-xs text-slate-500 mb-3">設定學校特殊專用教室，排課時系統將自動鎖定教室時段。</p>
+
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2 mb-4">
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-[11px] font-medium text-slate-600 mb-0.5">教室名稱</label>
+                  <input type="text" id="input-new-room-name" placeholder="如: 電腦教室(一)" class="w-full text-xs border border-slate-300 rounded px-2 py-1.5 focus:outline-none">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-medium text-slate-600 mb-0.5">同時容納班級數</label>
+                  <input type="number" id="input-new-room-cap" min="1" max="5" value="1" class="w-full text-xs border border-slate-300 rounded px-2 py-1.5 text-center">
+                </div>
+              </div>
+              <div>
+                <label class="block text-[11px] font-medium text-slate-600 mb-0.5">綁定使用此教室的教師 (以逗號分隔)</label>
+                <input type="text" id="input-new-room-teachers" placeholder="例如: 林資訊, 李資訊" class="w-full text-xs border border-slate-300 rounded px-2 py-1.5 focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-[11px] font-medium text-slate-600 mb-0.5">綁定使用此教室的科目 (以逗號分隔)</label>
+                <input type="text" id="input-new-room-subjects" placeholder="例如: 資訊, 自然, 音樂" class="w-full text-xs border border-slate-300 rounded px-2 py-1.5 focus:outline-none">
+              </div>
+              <button id="btn-add-special-room" class="w-full py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-medium rounded transition flex items-center justify-center gap-1">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                新增科任教室
+              </button>
+            </div>
+
+            <div id="list-special-rooms" class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: 各班各科目任教老師配課矩陣 -->
+    <section id="tab-assignments" class="tab-content hidden space-y-6">
+      <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <span class="p-2 bg-amber-100 text-amber-700 rounded-lg"><i data-lucide="users" class="w-5 h-5"></i></span>
+            功能 3：各班各科目任教老師配課矩陣
+          </h2>
+          <p class="text-sm text-slate-500 mt-1">依各年級專屬科目設定呈現配課表格，支援線上即時編輯與 Excel 多工作表匯出、匯入。</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="px-3.5 py-2 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition flex items-center gap-1.5 shadow-sm cursor-pointer">
+            <i data-lucide="file-up" class="w-4 h-4"></i>
+            匯入配課 Excel 檔
+            <input type="file" id="input-upload-assignments-excel" accept=".xlsx, .xls, .csv" class="hidden">
+          </label>
+          <button id="btn-export-assignments-excel" class="px-3.5 py-2 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="file-down" class="w-4 h-4"></i>
+            匯出配課表格 (Excel)
+          </button>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex items-center gap-3">
+          <span class="font-medium text-slate-700">快速配課工具：</span>
+          <button id="btn-auto-assign-homeroom" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 font-medium flex items-center gap-1" title="為國語、數學、生活、綜合等導師核心領域填入班級導師">
+            <i data-lucide="user-check" class="w-3.5 h-3.5 text-blue-600"></i>
+            一鍵配置各班導師授課
+          </button>
+          <button id="btn-clear-fake-teachers" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded border border-rose-300 font-medium flex items-center gap-1" title="清除所有自動填入的虛擬導師(導師_...)，還原為未配課狀態">
+            <i data-lucide="eraser" class="w-3.5 h-3.5 text-rose-600"></i>
+            清除未配課虛擬導師
+          </button>
+          <button id="btn-copy-assignment-parallel" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 font-medium flex items-center gap-1">
+            <i data-lucide="copy" class="w-3.5 h-3.5 text-purple-600"></i>
+            複製1班科任教師至同平行班
+          </button>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-slate-500 font-medium">切換年級檢視:</span>
+          <div class="flex gap-1 bg-slate-100 p-1 rounded-lg flex-wrap" id="assignment-grade-pills"></div>
+        </div>
+      </div>
+
+      <div id="container-assignment-matrix" class="space-y-6"></div>
+
+      <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+        <h3 class="font-semibold text-slate-800 text-sm mb-3 flex items-center gap-2">
+          <i data-lucide="pie-chart" class="w-4 h-4 text-indigo-600"></i>
+          全校教師授課節數統計表 (即時檢驗是否超鐘點)
+        </h3>
+        <div id="grid-teacher-workloads" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>
+      </div>
+    </section>
+
+    <!-- TAB 4: 排課作業與課表 -->
+    <section id="tab-scheduling" class="tab-content hidden space-y-6">
+      <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <span class="p-2 bg-indigo-100 text-indigo-700 rounded-lg"><i data-lucide="layout-grid" class="w-5 h-5"></i></span>
+            功能 4：排課作業與智慧排課引擎
+          </h2>
+          <p class="text-sm text-slate-500 mt-1">整合預排作業、每日排課約束、教師互斥設定，搭載嚴謹科學分佈 CSP 演算法。</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
+            <span class="text-xs text-slate-500 pl-2 font-medium flex items-center gap-1">
+              <i data-lucide="sliders" class="w-3.5 h-3.5 text-indigo-500"></i>
+              運算強度:
+            </span>
+            <select id="select-scheduling-intensity" class="text-xs bg-white border-0 rounded-lg px-2.5 py-1.5 text-slate-700 font-semibold focus:ring-1 focus:ring-indigo-500 shadow-xs cursor-pointer">
+              <option value="deep" selected>🚀 深度極限搜尋 (多輪重啟+深度彈射鏈，強力推薦)</option>
+              <option value="fast">⚡ 標準快速模式 (約 1~2 秒)</option>
+            </select>
+          </div>
+          <button id="btn-start-scheduling" onclick="executeSmartScheduling()" class="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-semibold text-sm rounded-xl shadow-md transition flex items-center gap-2 transform active:scale-95">
+            <i data-lucide="play" class="w-4 h-4 fill-white"></i>
+            開始智慧排課 (Execute)
+          </button>
+          <button id="btn-clear-timetable" class="px-3.5 py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg border border-slate-300 transition">
+            清除課表
+          </button>
+          <button id="btn-export-master-excel" class="px-3.5 py-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+            匯出全校課表 (Excel)
+          </button>
+          <button id="btn-print-timetable" class="px-3.5 py-2 text-xs bg-slate-800 hover:bg-slate-900 text-white font-medium rounded-lg transition flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="printer" class="w-4 h-4"></i>
+            列印課表
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- 4.1 預排作業 -->
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <i data-lucide="pin" class="w-4 h-4 text-amber-500"></i>
+              預排作業 (一定排 / 不排)
+            </h3>
+            <span class="text-[11px] text-slate-400">優先鎖定</span>
+          </div>
+
+          <div class="flex bg-slate-100 p-1 rounded-lg text-xs font-medium">
+            <button id="tab-pre-teacher" class="flex-1 py-1 rounded-md bg-white text-indigo-700 shadow-sm text-center font-bold">教師預排</button>
+            <button id="tab-pre-class" class="flex-1 py-1 rounded-md text-slate-600 hover:text-slate-900 text-center font-medium">班級科目預排</button>
+          </div>
+
+          <div id="form-pre-teacher" class="space-y-2.5 text-xs">
+            <div>
+              <label class="block text-slate-600 mb-1">選擇教師</label>
+              <select id="select-pre-teacher-name" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50"></select>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-slate-600 mb-1">星期</label>
+                <select id="select-pre-teacher-day" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50">
+                  <option value="1">星期一</option>
+                  <option value="2">星期二</option>
+                  <option value="3">星期三</option>
+                  <option value="4">星期四</option>
+                  <option value="5">星期五</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-slate-600 mb-1">節次</label>
+                <select id="select-pre-teacher-period" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50">
+                  <option value="1">第 1 節</option>
+                  <option value="2">第 2 節</option>
+                  <option value="3">第 3 節</option>
+                  <option value="4">第 4 節</option>
+                  <option value="5">第 5 節</option>
+                  <option value="6">第 6 節</option>
+                  <option value="7">第 7 節</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="block text-slate-600 mb-1">預排規則</label>
+              <select id="select-pre-teacher-type" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50 font-medium">
+                <option value="forbid" class="text-rose-600">不排 (此時段嚴禁排課/公假/進修)</option>
+                <option value="must" class="text-emerald-600">一定排 (此時段指定必須有課)</option>
+              </select>
+            </div>
+            <button id="btn-add-pre-teacher" class="w-full py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition flex items-center justify-center gap-1">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              加入教師預排規則
+            </button>
+          </div>
+
+          <div id="form-pre-class" class="space-y-2.5 text-xs hidden">
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-slate-600 mb-1">選擇班級</label>
+                <select id="select-pre-class-id" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50"></select>
+              </div>
+              <div>
+                <label class="block text-slate-600 mb-1">該班級所屬科目</label>
+                <select id="select-pre-class-subject" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50"></select>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-slate-600 mb-1">星期</label>
+                <select id="select-pre-class-day" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50">
+                  <option value="1">星期一</option>
+                  <option value="2">星期二</option>
+                  <option value="3">星期三</option>
+                  <option value="4">星期四</option>
+                  <option value="5">星期五</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-slate-600 mb-1">節次</label>
+                <select id="select-pre-class-period" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50">
+                  <option value="1">第 1 節</option>
+                  <option value="2">第 2 節</option>
+                  <option value="3">第 3 節</option>
+                  <option value="4">第 4 節</option>
+                  <option value="5">第 5 節</option>
+                  <option value="6">第 6 節</option>
+                  <option value="7">第 7 節</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="block text-slate-600 mb-1">預排規則</label>
+              <select id="select-pre-class-type" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50 font-medium">
+                <option value="must" class="text-emerald-600">一定排 (指定此節上該科目，如升旗/週會)</option>
+                <option value="forbid" class="text-rose-600">不排 (此節禁排該科目)</option>
+              </select>
+            </div>
+            <button id="btn-add-pre-class" class="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition flex items-center justify-center gap-1">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              加入班級預排規則
+            </button>
+          </div>
+
+          <div class="border-t border-slate-100 pt-3">
+            <h4 class="text-[11px] font-semibold text-slate-500 mb-2">已設定預排清單：</h4>
+            <div id="list-preschedule-rules" class="space-y-1.5 max-h-44 overflow-y-auto custom-scrollbar text-xs"></div>
+          </div>
+        </div>
+
+        <!-- 4.2 每日排課條件 -->
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+              排課條件 (每日節數限制)
+            </h3>
+            <span class="text-[11px] text-slate-400">時段負載</span>
+          </div>
+
+          <div class="space-y-2.5 text-xs">
+            <div>
+              <label class="block text-slate-600 mb-1">選項 3：個別教師 (或全體)</label>
+              <select id="select-daily-rule-teacher" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50">
+                <option value="ALL">全體教師 (通用規則)</option>
+              </select>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-slate-600 mb-1">指定星期</label>
+                <select id="select-daily-rule-day" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50">
+                  <option value="ALL">週一至週五每天</option>
+                  <option value="1">星期一</option>
+                  <option value="2">星期二</option>
+                  <option value="3">星期三</option>
+                  <option value="4">星期四</option>
+                  <option value="5">星期五</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-slate-600 mb-1">選項 1：排課條件模式</label>
+                <select id="select-daily-rule-type" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50 font-medium">
+                  <option value="max">最多排 (上限)</option>
+                  <option value="fixed">固定排 (剛好)</option>
+                  <option value="min">最少排 (下限)</option>
+                  <option value="forbid">不排 (當日 0 節)</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="block text-slate-600 mb-1">選項 2：節數選擇 (1~7 節)</label>
+              <select id="select-daily-rule-periods" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50">
+                <option value="1">1 節</option>
+                <option value="2">2 節</option>
+                <option value="3">3 節</option>
+                <option value="4" selected>4 節</option>
+                <option value="5">5 節</option>
+                <option value="6">6 節</option>
+                <option value="7">7 節</option>
+              </select>
+            </div>
+            <button id="btn-add-daily-rule" class="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition flex items-center justify-center gap-1">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              加入每日排課條件
+            </button>
+          </div>
+
+          <div class="border-t border-slate-100 pt-3">
+            <h4 class="text-[11px] font-semibold text-slate-500 mb-2">已設定每日節數條件：</h4>
+            <div id="list-daily-rules" class="space-y-1.5 max-h-44 overflow-y-auto custom-scrollbar text-xs"></div>
+          </div>
+        </div>
+
+        <!-- 4.3 教師互斥 -->
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <i data-lucide="git-branch" class="w-4 h-4 text-purple-600"></i>
+              教師互斥 (不同時上課的教師)
+            </h3>
+            <span class="text-[11px] text-slate-400">協同搭班/資源共用</span>
+          </div>
+
+          <div class="space-y-2.5 text-xs">
+            <p class="text-slate-500">設定兩位（或多位）教師不可在同一個節次同時有課。</p>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-slate-600 mb-1">教師 A</label>
+                <select id="select-mutex-teacher-1" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50"></select>
+              </div>
+              <div>
+                <label class="block text-slate-600 mb-1">教師 B</label>
+                <select id="select-mutex-teacher-2" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50"></select>
+              </div>
+            </div>
+            <button id="btn-add-teacher-mutex" class="w-full py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition flex items-center justify-center gap-1">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              建立教師互斥組
+            </button>
+          </div>
+
+          <div class="border-t border-slate-100 pt-3">
+            <h4 class="text-[11px] font-semibold text-slate-500 mb-2">已設定互斥教師清單：</h4>
+            <div id="list-teacher-mutexes" class="space-y-1.5 max-h-44 overflow-y-auto custom-scrollbar text-xs"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Engine Status & Diagnostics -->
+      <div id="panel-scheduling-status" class="hidden bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <span id="icon-status-badge" class="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg"><i data-lucide="check-circle" class="w-4 h-4"></i></span>
+            <h3 class="font-bold text-slate-800 text-sm" id="title-status-banner">排課診斷分析報告</h3>
+          </div>
+          <span class="text-xs text-slate-500" id="text-scheduling-time">耗時：0 ms</span>
+        </div>
+        <div id="content-status-diagnostics" class="space-y-2 text-xs"></div>
+      </div>
+
+      <!-- Timetable Workspace -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" id="print-area">
+        <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 no-print">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">課表檢視：</span>
+            <div class="flex bg-slate-200/80 p-1 rounded-lg text-xs font-medium">
+              <button class="view-tab active px-3 py-1.5 rounded-md bg-white text-slate-900 shadow-sm" data-view="class">班級課表</button>
+              <button class="view-tab px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900" data-view="teacher">教師課表</button>
+              <button class="view-tab px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900" data-view="room">科任教室課表</button>
+              <button class="view-tab px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900" data-view="master">全校總課表</button>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2" id="view-target-container">
+            <label class="text-xs text-slate-600 font-medium" id="label-view-target">選擇班級：</label>
+            <select id="select-view-target" class="text-xs border border-slate-300 rounded-lg px-3 py-1.5 bg-white font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"></select>
+          </div>
+        </div>
+
+        <div class="p-6">
+          <div class="hidden print:block text-center mb-6">
+            <h2 class="text-2xl font-bold text-slate-900" id="print-school-title">學校課程排課表</h2>
+            <p class="text-sm text-slate-600 mt-1" id="print-target-title">班級：101班</p>
+          </div>
+
+          <!-- Manual Adjustment Control Banner -->
+          <div id="panel-manual-swap" class="mb-4 bg-gradient-to-r from-indigo-50/90 to-blue-50/70 border border-indigo-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs no-print shadow-2xs">
+            <div class="flex items-center gap-2.5">
+              <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow-xs shrink-0">
+                <i data-lucide="arrow-left-right" class="w-4 h-4"></i>
+              </span>
+              <div>
+                <div class="font-bold text-indigo-950 flex items-center gap-2">
+                  <span>智慧手動調課模組</span>
+                  <span class="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.2 rounded-full font-normal border border-indigo-200">班級與教師課表雙模式支援 · 即時8重防呆檢核</span>
+                </div>
+                <div id="label-swap-hint" class="text-indigo-700 text-[11px] mt-0.5">點選課表中任意一堂課（來源），再點選第二堂課或空白節次（目標）即可對調或移動。</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div id="swap-status-badge" class="hidden px-3 py-1.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-medium flex items-center gap-2 shadow-2xs">
+                <span class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                <span id="text-swap-selected">已選取時段</span>
+                <button type="button" onclick="cancelSwapSelection()" class="ml-1 text-slate-400 hover:text-slate-700 font-bold p-0.5 rounded hover:bg-amber-200/60" title="取消選取">✕</button>
+              </div>
+              <button id="btn-undo-swap" type="button" onclick="undoLastSwap()" class="hidden px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg font-medium shadow-2xs flex items-center gap-1.5 transition active:scale-95" title="復原上一次手動調課">
+                <i data-lucide="undo-2" class="w-3.5 h-3.5 text-indigo-600"></i>
+                <span>復原調課</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto custom-scrollbar">
+            <table class="w-full border-collapse border border-slate-200 text-center text-xs" id="table-active-timetable"></table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 no-print mt-auto">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <div>校園智慧排課系統 v2.1 (教師/班級雙模式手動排課增強版) · 支援 GitHub Pages 靜態託管</div>
+      <div class="flex items-center gap-3">
+        <span>資料自動暫存於本機 LocalStorage</span>
+        <span>·</span>
+        <span>符合嚴謹教育學分佈原則</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Embedded Application Logic JS -->
+  <script>
+    const APP_STORAGE_KEY = 'SCHOOL_TIMETABLE_PRO_DATA_V3';
+
+    // 動態數列產生器（確保絕無陣列語法截斷錯誤）
+    const getPeriodsRange = (count) => Array.from({ length: count }, (_, i) => i + 1);
+    const halfDay = () => getPeriodsRange(4);
+    const fullDay = () => getPeriodsRange(7);
+
+    function createDefaultGradeSubjects() {
+      const c = (id, name, p, cat, d) => ({ id, name, weeklyPeriods: p, category: cat, allowDoublePeriod: !!d });
+      return {
+        1: [c('SUB_G1_CH','國語',6,'core'), c('SUB_G1_MA','數學',3,'core'), c('SUB_G1_LIFE','生活',6,'dynamic',1), c('SUB_G1_HEALTH','健體',3,'dynamic'), c('SUB_G1_SYN','綜合',2,'general'), c('SUB_G1_FLEX','彈性/校訂',2,'general')],
+        2: [c('SUB_G2_CH','國語',6,'core'), c('SUB_G2_MA','數學',3,'core'), c('SUB_G2_LIFE','生活',6,'dynamic',1), c('SUB_G2_HEALTH','健體',3,'dynamic'), c('SUB_G2_SYN','綜合',2,'general'), c('SUB_G2_FLEX','彈性/校訂',2,'general')],
+        3: [c('SUB_G3_CH','國語',5,'core'), c('SUB_G3_MA','數學',4,'core'), c('SUB_G3_EN','英語',2,'core'), c('SUB_G3_SOC','社會',3,'core'), c('SUB_G3_SCI','自然',3,'core'), c('SUB_G3_ART','藝文',3,'dynamic',1), c('SUB_G3_HEALTH','健體',3,'dynamic'), c('SUB_G3_SYN','綜合',3,'general'), c('SUB_G3_IT','資訊',1,'dynamic'), c('SUB_G3_FLEX','彈性/校訂',2,'general')],
+        4: [c('SUB_G4_CH','國語',5,'core'), c('SUB_G4_MA','數學',4,'core'), c('SUB_G4_EN','英語',2,'core'), c('SUB_G4_SOC','社會',3,'core'), c('SUB_G4_SCI','自然',3,'core'), c('SUB_G4_ART','藝文',3,'dynamic',1), c('SUB_G4_HEALTH','健體',3,'dynamic'), c('SUB_G4_SYN','綜合',3,'general'), c('SUB_G4_IT','資訊',1,'dynamic'), c('SUB_G4_FLEX','彈性/校訂',2,'general')],
+        5: [c('SUB_G5_CH','國語',5,'core'), c('SUB_G5_MA','數學',4,'core'), c('SUB_G5_EN','英語',3,'core'), c('SUB_G5_SOC','社會',3,'core'), c('SUB_G5_SCI','自然',3,'core'), c('SUB_G5_ART','藝文',3,'dynamic',1), c('SUB_G5_HEALTH','健體',3,'dynamic'), c('SUB_G5_SYN','綜合',3,'general'), c('SUB_G5_TECH','科技/資訊',1,'dynamic'), c('SUB_G5_LOC','本土語',1,'general'), c('SUB_G5_FLEX','彈性/校訂',2,'general')],
+        6: [c('SUB_G6_CH','國語',5,'core'), c('SUB_G6_MA','數學',4,'core'), c('SUB_G6_EN','英語',3,'core'), c('SUB_G6_SOC','社會',3,'core'), c('SUB_G6_SCI','自然',3,'core'), c('SUB_G6_ART','藝文',3,'dynamic',1), c('SUB_G6_HEALTH','健體',3,'dynamic'), c('SUB_G6_SYN','綜合',3,'general'), c('SUB_G6_TECH','科技/資訊',1,'dynamic'), c('SUB_G6_LOC','本土語',1,'general'), c('SUB_G6_FLEX','彈性/校訂',2,'general')]
+      };
+    }
+
+    const defaultState = {
+      grades: getPeriodsRange(6),
+      classes: [
+        { id: 'C_101', gradeId: 1, className: '101班' },
+        { id: 'C_102', gradeId: 1, className: '102班' },
+        { id: 'C_201', gradeId: 2, className: '201班' },
+        { id: 'C_202', gradeId: 2, className: '202班' },
+        { id: 'C_301', gradeId: 3, className: '301班' },
+        { id: 'C_302', gradeId: 3, className: '302班' }
+      ],
+      gradeSubjects: createDefaultGradeSubjects(),
+      specialRooms: [
+        { id: 'ROOM_IT_1', name: '電腦教室(一)', boundTeachers: ['林資訊'], boundSubjects: ['資訊', '科技/資訊'], capacity: 1 },
+        { id: 'ROOM_MU_1', name: '音樂教室(一)', boundTeachers: ['李音樂'], boundSubjects: ['藝文', '音樂'], capacity: 1 },
+        { id: 'ROOM_SCI_1', name: '自然實驗室', boundTeachers: ['王自然'], boundSubjects: ['自然'], capacity: 1 }
+      ],
+      assignments: [],
+      preTeacher: [
+        { teacherName: '陳英語', day: 2, period: 1, type: 'forbid' }
+      ],
+      preClassSubject: [
+        { classId: 'C_101', subjectId: 'SUB_G1_CH', day: 1, period: 1, type: 'must' }
+      ],
+      dailyTeacherRules: [
+        { teacherName: '張體育', day: 1, type: 'max', periods: 4 }
+      ],
+      teacherMutexes: [
+        { teachers: ['陳英語', '黃英語'] }
+      ],
+      timetable: {},
+      periodsPerDay: 7
+    };
+
+    let AppState = loadState();
+
+    function loadState() {
+      try {
+        const saved = localStorage.getItem(APP_STORAGE_KEY) || localStorage.getItem('SCHOOL_TIMETABLE_PRO_DATA_V2') || localStorage.getItem('SCHOOL_TIMETABLE_PRO_DATA_V1');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (!parsed.gradeSubjects) parsed.gradeSubjects = createDefaultGradeSubjects();
+          return parsed;
+        }
+      } catch (e) {
+        console.error('Failed to load state from localStorage', e);
+      }
+      const initial = JSON.parse(JSON.stringify(defaultState));
+      initDemoAssignments(initial);
+      return initial;
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(AppState));
+      } catch (e) {
+        console.error('Failed to save state to localStorage', e);
+      }
+    }
+
+    function ensureGradeSubjects(gradeId) {
+      if (!AppState.gradeSubjects) AppState.gradeSubjects = {};
+      if (!AppState.gradeSubjects[gradeId] || AppState.gradeSubjects[gradeId].length === 0) {
+        const defaults = createDefaultGradeSubjects();
+        AppState.gradeSubjects[gradeId] = defaults[gradeId] ? JSON.parse(JSON.stringify(defaults[gradeId])) : [
+          { id: `SUB_G${gradeId}_CH`, name: '國語', weeklyPeriods: 5, category: 'core', allowDoublePeriod: false },
+          { id: `SUB_G${gradeId}_MA`, name: '數學', weeklyPeriods: 4, category: 'core', allowDoublePeriod: false },
+          { id: `SUB_G${gradeId}_EN`, name: '英語', weeklyPeriods: 2, category: 'core', allowDoublePeriod: false },
+          { id: `SUB_G${gradeId}_SCI`, name: '自然', weeklyPeriods: 3, category: 'core', allowDoublePeriod: false },
+          { id: `SUB_G${gradeId}_SOC`, name: '社會', weeklyPeriods: 3, category: 'core', allowDoublePeriod: false },
+          { id: `SUB_G${gradeId}_HEALTH`, name: '健體', weeklyPeriods: 3, category: 'dynamic', allowDoublePeriod: false }
+        ];
+      }
+      return AppState.gradeSubjects[gradeId];
+    }
+
+    function initDemoAssignments(state) {
+      state.assignments = [];
+      state.classes.forEach(c => {
+        const homeroom = `${c.className}導師`;
+        const subjects = state.gradeSubjects[c.gradeId] || [];
+
+        subjects.forEach(s => {
+          let teacher = homeroom;
+          let roomId = null;
+
+          if (s.name.includes('英語')) teacher = (c.gradeId <= 3 ? '陳英語' : '黃英語');
+          if (s.name.includes('自然')) { teacher = '王自然'; roomId = 'ROOM_SCI_1'; }
+          if (s.name.includes('健體') || s.name.includes('體育')) teacher = (c.gradeId % 2 === 1 ? '張體育' : '孫體育');
+          if (s.name.includes('藝文') || s.name.includes('音樂')) { teacher = '李音樂'; roomId = 'ROOM_MU_1'; }
+          if (s.name.includes('生活')) teacher = homeroom;
+          if (s.name.includes('資訊') || s.name.includes('科技')) { teacher = '林資訊'; roomId = 'ROOM_IT_1'; }
+
+          state.assignments.push({
+            classId: c.id,
+            gradeId: c.gradeId,
+            subjectId: s.id,
+            subjectName: s.name,
+            teacherName: teacher,
+            weeklyPeriods: s.weeklyPeriods,
+            roomId: roomId
+          });
+        });
+      });
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      const bg = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-rose-600' : 'bg-slate-800';
+      const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'alert-circle' : 'info';
+
+      toast.className = `${bg} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 text-xs transition transform duration-200 translate-y-2 pointer-events-auto`;
+      toast.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4"></i><span>${message}</span>`;
+      container.appendChild(toast);
+      if (window.lucide) lucide.createIcons();
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 200);
+      }, 3500);
+    }
+
+    // 導航標籤點擊切換事件
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.nav-tab').forEach(t => {
+          t.classList.remove('active', 'text-white', 'bg-indigo-600', 'shadow');
+          t.classList.add('text-indigo-300');
+        });
+        tab.classList.add('active', 'text-white', 'bg-indigo-600', 'shadow');
+        tab.classList.remove('text-indigo-300');
+
+        const targetTab = tab.getAttribute('data-tab');
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+        document.getElementById(targetTab).classList.remove('hidden');
+
+        if (targetTab === 'tab-classes') renderClassesModule();
+        if (targetTab === 'tab-subjects-rooms') renderSubjectsRoomsModule();
+        if (targetTab === 'tab-assignments') renderAssignmentsModule();
+        if (targetTab === 'tab-scheduling') renderSchedulingModule();
+      });
+    });
+
+    // MODULE 1: 班級管理
+    let currentGradeFilter = 'ALL';
+
+    function renderClassesModule() {
+      document.getElementById('stat-total-classes').textContent = AppState.classes.length;
+      const gradesSet = new Set(AppState.classes.map(c => c.gradeId));
+      document.getElementById('stat-total-grades').textContent = gradesSet.size;
+
+      const pillsContainer = document.getElementById('grade-filter-pills');
+      pillsContainer.innerHTML = '';
+      const allBtn = document.createElement('button');
+      allBtn.className = `px-2.5 py-0.5 text-xs rounded-full border ${currentGradeFilter === 'ALL' ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 text-slate-600 border-slate-200'}`;
+      allBtn.textContent = '全部年級';
+      allBtn.onclick = () => { currentGradeFilter = 'ALL'; renderClassesModule(); };
+      pillsContainer.appendChild(allBtn);
+
+      const allGrades = Array.from(new Set(AppState.classes.map(c => c.gradeId).concat(getPeriodsRange(6)))).sort((a,b)=>a-b);
+      allGrades.forEach(g => {
+        const btn = document.createElement('button');
+        btn.className = `px-2.5 py-0.5 text-xs rounded-full border ${currentGradeFilter == g ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 text-slate-600 border-slate-200'}`;
+        btn.textContent = `${g}年級`;
+        btn.onclick = () => { currentGradeFilter = g; renderClassesModule(); };
+        pillsContainer.appendChild(btn);
+      });
+
+      const tbody = document.getElementById('tbody-classes');
+      tbody.innerHTML = '';
+      const filtered = AppState.classes.filter(c => currentGradeFilter === 'ALL' || c.gradeId == currentGradeFilter);
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="px-6 py-8 text-center text-slate-400">目前尚無班級資料，請手動新增或上傳 Excel 檔案。</td></tr>`;
+        return;
+      }
+
+      filtered.forEach((c, index) => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 transition';
+        tr.innerHTML = `
+          <td class="px-6 py-3 text-slate-400 font-mono">${index + 1}</td>
+          <td class="px-6 py-3 font-medium text-slate-800">${c.gradeId} 年級</td>
+          <td class="px-6 py-3">
+            <input type="text" value="${c.className}" class="border border-transparent hover:border-slate-300 focus:border-blue-500 rounded px-2 py-1 bg-transparent font-semibold text-slate-800 focus:bg-white focus:outline-none" onchange="updateClassName('${c.id}', this.value)">
+          </td>
+          <td class="px-6 py-3 text-center">
+            <button class="text-rose-500 hover:text-rose-700 p-1 rounded transition" onclick="deleteClass('${c.id}')" title="刪除班級">
+              <i data-lucide="trash" class="w-4 h-4"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function updateClassName(classId, newName) {
+      const cls = AppState.classes.find(c => c.id === classId);
+      if (cls && newName.trim()) {
+        cls.className = newName.trim();
+        saveState();
+        showToast(`班級名稱已更新為【${cls.className}】`, 'success');
+      }
+    }
+
+    function deleteClass(classId) {
+      const cls = AppState.classes.find(c => c.id === classId);
+      if (!confirm(`確定要刪除班級【${cls ? cls.className : classId}】嗎？此動作將同步移除其配課與預排設定。`)) return;
+
+      AppState.classes = AppState.classes.filter(c => c.id !== classId);
+      AppState.assignments = AppState.assignments.filter(a => a.classId !== classId);
+      AppState.preClassSubject = AppState.preClassSubject.filter(p => p.classId !== classId);
+      if (AppState.timetable && AppState.timetable[classId]) {
+        delete AppState.timetable[classId];
+      }
+
+      saveState();
+      renderClassesModule();
+      showToast('班級已刪除', 'info');
+    }
+
+    document.getElementById('btn-add-single-class').addEventListener('click', () => {
+      const gradeId = parseInt(document.getElementById('select-new-class-grade').value, 10);
+      const nameInput = document.getElementById('input-new-class-name');
+      const name = nameInput.value.trim();
+
+      if (!name) { showToast('請輸入班級名稱', 'error'); return; }
+
+      const newId = `C_${gradeId}_${Date.now()}`;
+      AppState.classes.push({ id: newId, gradeId, className: name });
+      ensureGradeSubjects(gradeId);
+      syncAssignmentsForClass(newId, gradeId);
+
+      saveState();
+      renderClassesModule();
+      nameInput.value = '';
+      showToast(`已新增班級【${name}】`, 'success');
+    });
+
+    document.getElementById('btn-generate-batch-classes').addEventListener('click', () => {
+      const range = document.getElementById('select-batch-grades').value;
+      const count = parseInt(document.getElementById('input-batch-count').value, 10) || 2;
+      const naming = document.getElementById('select-batch-naming').value;
+
+      let startGrade = 1, endGrade = 6;
+      if (range === '1-3') { startGrade = 1; endGrade = 3; }
+      else if (range === '4-6') { startGrade = 4; endGrade = 6; }
+      else if (range === '7-9') { startGrade = 7; endGrade = 9; }
+      else if (range.includes('-')) {
+        const [s, e] = range.split('-').map(Number);
+        startGrade = s; endGrade = e;
+      }
+
+      const heavenly = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛'];
+
+      for (let g = startGrade; g <= endGrade; g++) {
+        ensureGradeSubjects(g);
+        for (let c = 1; c <= count; c++) {
+          let cName = '';
+          if (naming === 'num') cName = `${g}0${c}班`;
+          else if (naming === 'chinese') cName = `${g}年${c}班`;
+          else if (naming === 'letter') cName = `${g}年${heavenly[c - 1] || c}班`;
+
+          const exists = AppState.classes.some(x => x.gradeId === g && x.className === cName);
+          if (!exists) {
+            const newId = `C_${g}_${c}_${Date.now()}`;
+            AppState.classes.push({ id: newId, gradeId: g, className: cName });
+            syncAssignmentsForClass(newId, g);
+          }
+        }
+      }
+
+      saveState();
+      renderClassesModule();
+      showToast('批次生成班級完成！', 'success');
+    });
+
+    function syncAssignmentsForClass(classId, gradeId) {
+      const subjects = ensureGradeSubjects(gradeId);
+      const validSubIds = new Set(subjects.map(s => s.id));
+
+      AppState.assignments = AppState.assignments.filter(a => {
+        if (a.classId !== classId) return true;
+        return validSubIds.has(a.subjectId);
+      });
+
+      const seenSubIds = new Set();
+      AppState.assignments = AppState.assignments.filter(a => {
+        if (a.classId !== classId) return true;
+        if (seenSubIds.has(a.subjectId)) return false;
+        seenSubIds.add(a.subjectId);
+        return true;
+      });
+
+      subjects.forEach(s => {
+        const existing = AppState.assignments.find(a => a.classId === classId && a.subjectId === s.id);
+        if (!existing) {
+          AppState.assignments.push({
+            classId,
+            gradeId,
+            subjectId: s.id,
+            subjectName: s.name,
+            teacherName: '',
+            weeklyPeriods: s.weeklyPeriods,
+            roomId: null
+          });
+        } else {
+          existing.subjectName = s.name;
+          existing.weeklyPeriods = s.weeklyPeriods;
+          if (existing.teacherName && (existing.teacherName.startsWith('導師_C_') || existing.teacherName.startsWith('導師_c_') || existing.teacherName.includes('178917'))) {
+            existing.teacherName = '';
+          }
+        }
+      });
+    }
+
+    document.getElementById('btn-clear-all-classes').addEventListener('click', () => {
+      if (!confirm('確定要清空全校所有班級嗎？這將一併清空配課與課表！')) return;
+      AppState.classes = [];
+      AppState.assignments = [];
+      AppState.preClassSubject = [];
+      AppState.timetable = {};
+      saveState();
+      renderClassesModule();
+      showToast('所有班級已清空', 'info');
+    });
+
+    document.getElementById('btn-download-class-template').addEventListener('click', () => {
+      const templateData = [
+        { "年級": 1, "班級名稱": "101班", "備註": "一年級第一班" },
+        { "年級": 1, "班級名稱": "102班", "備註": "一年級第二班" },
+        { "年級": 2, "班級名稱": "201班", "備註": "二年級第一班" },
+        { "年級": 3, "班級名稱": "301班", "備註": "三年級第一班" }
+      ];
+      const ws = XLSX.utils.json_to_sheet(templateData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "班級匯入範本");
+      XLSX.writeFile(wb, "班級匯入範本.xlsx");
+      showToast('已下載班級匯入 Excel 範本', 'success');
+    });
+
+    document.getElementById('btn-export-classes-excel').addEventListener('click', () => {
+      if (AppState.classes.length === 0) { showToast('目前尚無班級可匯出', 'error'); return; }
+      const data = AppState.classes.map(c => ({ "年級": c.gradeId, "班級代碼": c.id, "班級名稱": c.className }));
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "班級清單");
+      XLSX.writeFile(wb, "全校班級清單.xlsx");
+      showToast('全校班級清單已匯出為 Excel', 'success');
+    });
+
+    document.getElementById('input-upload-classes-excel').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(firstSheet);
+
+          let added = 0;
+          json.forEach(row => {
+            const grade = parseInt(row['年級'] || row['Grade'] || row['grade'], 10);
+            const name = String(row['班級名稱'] || row['班級'] || row['ClassName'] || row['name'] || '').trim();
+            if (grade && name) {
+              const exists = AppState.classes.some(x => x.gradeId === grade && x.className === name);
+              if (!exists) {
+                const newId = `C_${grade}_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+                AppState.classes.push({ id: newId, gradeId: grade, className: name });
+                ensureGradeSubjects(grade);
+                syncAssignmentsForClass(newId, grade);
+                added++;
+              }
+            }
+          });
+
+          saveState();
+          renderClassesModule();
+          showToast(`成功從 Excel 匯入 ${added} 個新班級！`, 'success');
+        } catch (err) {
+          showToast('Excel 解析失敗，請確認檔案格式是否正確。', 'error');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      e.target.value = '';
+    });
+
+    // MODULE 2: 科目與科任教室
+    let activeSubjectGrade = 1;
+
+    function renderSubjectsRoomsModule() {
+      const gradeTabsContainer = document.getElementById('subject-grade-tabs');
+      gradeTabsContainer.innerHTML = '';
+
+      const presentGrades = Array.from(new Set(AppState.classes.map(c => c.gradeId).concat(getPeriodsRange(6)))).sort((a,b)=>a-b);
+
+      presentGrades.forEach(g => {
+        const btn = document.createElement('button');
+        const isActive = g === activeSubjectGrade;
+        btn.className = `px-3 py-1.5 text-xs font-semibold rounded-md transition ${isActive ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'}`;
+        btn.textContent = `${g} 年級`;
+        btn.onclick = () => {
+          activeSubjectGrade = g;
+          renderSubjectsRoomsModule();
+        };
+        gradeTabsContainer.appendChild(btn);
+      });
+
+      const copySelect = document.getElementById('select-copy-target-grade');
+      copySelect.innerHTML = `<option value="ALL">所有其他年級</option>` + presentGrades.filter(g => g !== activeSubjectGrade).map(g => `<option value="${g}">${g} 年級</option>`).join('');
+
+      const currentSubjects = ensureGradeSubjects(activeSubjectGrade);
+      const totalPeriods = currentSubjects.reduce((sum, s) => sum + (s.weeklyPeriods || 0), 0);
+      document.getElementById('label-current-grade-summary').innerHTML = `<span class="font-bold text-emerald-900">${activeSubjectGrade} 年級</span> 目前每週應排總節數：<strong>${totalPeriods}</strong> 節 (每週上限 35 節)`;
+
+      const tbody = document.getElementById('tbody-grade-subjects');
+      tbody.innerHTML = '';
+
+      if (currentSubjects.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-400">此年級尚未新增任何科目，請利用下方表單新增。</td></tr>`;
+      } else {
+        currentSubjects.forEach((s) => {
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-slate-50 transition border-b border-slate-100';
+          tr.innerHTML = `
+            <td class="px-3 py-2 font-medium text-slate-800">
+              <input type="text" value="${s.name}" class="border border-transparent hover:border-slate-300 focus:border-emerald-500 rounded px-1.5 py-0.5 bg-transparent font-semibold text-slate-800 focus:bg-white focus:outline-none w-full" onchange="updateGradeSubjectName(${activeSubjectGrade}, '${s.id}', this.value)">
+            </td>
+            <td class="px-3 py-2 text-center">
+              <input type="number" min="1" max="10" value="${s.weeklyPeriods}" class="w-14 text-center border border-slate-300 rounded px-1 py-0.5 font-bold text-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-500" onchange="updateGradeSubjectPeriods(${activeSubjectGrade}, '${s.id}', this.value)">
+            </td>
+            <td class="px-3 py-2">
+              <select class="border border-slate-200 rounded px-1.5 py-0.5 text-[11px] bg-slate-50 focus:outline-none" onchange="updateGradeSubjectCategory(${activeSubjectGrade}, '${s.id}', this.value)">
+                <option value="core" ${s.category === 'core' ? 'selected' : ''}>核心主科</option>
+                <option value="dynamic" ${s.category === 'dynamic' ? 'selected' : ''}>藝能動態</option>
+                <option value="general" ${s.category === 'general' ? 'selected' : ''}>一般綜合/校訂</option>
+              </select>
+            </td>
+            <td class="px-3 py-2 text-center">
+              <input type="checkbox" ${s.allowDoublePeriod ? 'checked' : ''} onchange="updateGradeSubjectDouble(${activeSubjectGrade}, '${s.id}', this.checked)" class="rounded text-emerald-600 focus:ring-emerald-500">
+            </td>
+            <td class="px-3 py-2 text-center">
+              <button class="text-rose-500 hover:text-rose-700 p-1 rounded transition" onclick="deleteGradeSubject(${activeSubjectGrade}, '${s.id}')" title="刪除此科目">
+                <i data-lucide="trash" class="w-3.5 h-3.5"></i>
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      const roomList = document.getElementById('list-special-rooms');
+      roomList.innerHTML = '';
+      if (AppState.specialRooms.length === 0) {
+        roomList.innerHTML = '<div class="text-center text-slate-400 py-4 text-xs">尚未設定科任教室</div>';
+      } else {
+        AppState.specialRooms.forEach(r => {
+          const card = document.createElement('div');
+          card.className = 'bg-slate-50 border border-slate-200 p-3 rounded-lg flex items-start justify-between gap-2 text-xs';
+          card.innerHTML = `
+            <div>
+              <div class="font-bold text-slate-800 flex items-center gap-1.5">
+                <i data-lucide="door-closed" class="w-3.5 h-3.5 text-teal-600"></i>
+                ${r.name}
+                <span class="text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.2 rounded">容量: ${r.capacity || 1} 班</span>
+              </div>
+              <div class="text-slate-500 text-[11px] mt-1">
+                <div>綁定教師: <span class="font-medium text-slate-700">${(r.boundTeachers || []).join(', ') || '無'}</span></div>
+                <div>綁定科目: <span class="font-medium text-slate-700">${(r.boundSubjects || []).join(', ') || '無'}</span></div>
+              </div>
+            </div>
+            <button class="text-rose-500 hover:text-rose-700 p-1" onclick="deleteSpecialRoom('${r.id}')">
+              <i data-lucide="trash" class="w-3.5 h-3.5"></i>
+            </button>
+          `;
+          roomList.appendChild(card);
+        });
+      }
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function updateGradeSubjectName(gradeId, subId, newName) {
+      const subjects = ensureGradeSubjects(gradeId);
+      const sub = subjects.find(s => s.id === subId);
+      if (sub && newName.trim()) {
+        sub.name = newName.trim();
+        AppState.assignments.forEach(a => {
+          if (a.gradeId == gradeId && a.subjectId === subId) {
+            a.subjectName = sub.name;
+          }
+        });
+        saveState();
+        showToast(`${gradeId}年級科目名稱更新為【${sub.name}】`, 'success');
+      }
+    }
+
+    function updateGradeSubjectPeriods(gradeId, subId, periods) {
+      const subjects = ensureGradeSubjects(gradeId);
+      const sub = subjects.find(s => s.id === subId);
+      const val = parseInt(periods, 10);
+      if (sub && val > 0) {
+        sub.weeklyPeriods = val;
+        AppState.assignments.forEach(a => {
+          if (a.gradeId == gradeId && a.subjectId === subId) {
+            a.weeklyPeriods = val;
+          }
+        });
+        saveState();
+        renderSubjectsRoomsModule();
+        showToast(`${gradeId}年級【${sub.name}】每週節數更新為 ${val} 節`, 'info');
+      }
+    }
+
+    function updateGradeSubjectCategory(gradeId, subId, cat) {
+      const subjects = ensureGradeSubjects(gradeId);
+      const sub = subjects.find(s => s.id === subId);
+      if (sub) { sub.category = cat; saveState(); }
+    }
+
+    function updateGradeSubjectDouble(gradeId, subId, allow) {
+      const subjects = ensureGradeSubjects(gradeId);
+      const sub = subjects.find(s => s.id === subId);
+      if (sub) { sub.allowDoublePeriod = allow; saveState(); }
+    }
+
+    function deleteGradeSubject(gradeId, subId) {
+      const subjects = ensureGradeSubjects(gradeId);
+      const sub = subjects.find(s => s.id === subId);
+      if (!confirm(`確定要從 ${gradeId} 年級中刪除科目【${sub ? sub.name : subId}】嗎？該年級各班的此科配課將同步移除。`)) return;
+
+      AppState.gradeSubjects[gradeId] = subjects.filter(s => s.id !== subId);
+      AppState.assignments = AppState.assignments.filter(a => !(a.gradeId == gradeId && a.subjectId === subId));
+      AppState.preClassSubject = AppState.preClassSubject.filter(p => !(p.subjectId === subId));
+
+      saveState();
+      renderSubjectsRoomsModule();
+      showToast(`已從 ${gradeId} 年級刪除科目`, 'info');
+    }
+
+    document.getElementById('btn-add-subject').addEventListener('click', () => {
+      const name = document.getElementById('input-new-subject-name').value.trim();
+      const periods = parseInt(document.getElementById('input-new-subject-periods').value, 10) || 2;
+      const cat = document.getElementById('select-new-subject-category').value;
+
+      if (!name) { showToast('請輸入科目名稱', 'error'); return; }
+
+      const subjects = ensureGradeSubjects(activeSubjectGrade);
+      const subId = `SUB_G${activeSubjectGrade}_${Date.now()}`;
+
+      subjects.push({
+        id: subId,
+        name,
+        weeklyPeriods: periods,
+        category: cat,
+        allowDoublePeriod: false
+      });
+
+      AppState.classes.filter(c => c.gradeId == activeSubjectGrade).forEach(c => {
+        AppState.assignments.push({
+          classId: c.id,
+          gradeId: activeSubjectGrade,
+          subjectId: subId,
+          subjectName: name,
+          teacherName: '',
+          weeklyPeriods: periods,
+          roomId: null
+        });
+      });
+
+      saveState();
+      renderSubjectsRoomsModule();
+      document.getElementById('input-new-subject-name').value = '';
+      showToast(`已為 ${activeSubjectGrade} 年級新增科目【${name}】(${periods}節)`, 'success');
+    });
+
+    document.getElementById('btn-copy-grade-subjects').addEventListener('click', () => {
+      const target = document.getElementById('select-copy-target-grade').value;
+      const sourceSubjects = ensureGradeSubjects(activeSubjectGrade);
+
+      if (sourceSubjects.length === 0) {
+        showToast('目前年級尚無科目可複製', 'error');
+        return;
+      }
+
+      if (target === 'ALL') {
+        if (!confirm(`確定要將【${activeSubjectGrade} 年級】的所有科目與節數設定，複製覆蓋至全校所有其他年級嗎？`)) return;
+        const allGrades = Array.from(new Set(AppState.classes.map(c => c.gradeId).concat(getPeriodsRange(6))));
+        allGrades.forEach(g => {
+          if (g !== activeSubjectGrade) {
+            AppState.gradeSubjects[g] = JSON.parse(JSON.stringify(sourceSubjects)).map((s, idx) => ({
+              ...s,
+              id: `SUB_G${g}_${idx}_${s.name}`
+            }));
+            AppState.classes.filter(c => c.gradeId == g).forEach(c => {
+              syncAssignmentsForClass(c.id, g);
+            });
+          }
+        });
+        showToast(`已成功將科目設定複製至全校所有年級！`, 'success');
+      } else {
+        const targetG = parseInt(target, 10);
+        if (!confirm(`確定要將【${activeSubjectGrade} 年級】的科目設定複製至【${targetG} 年級】嗎？`)) return;
+        AppState.gradeSubjects[targetG] = JSON.parse(JSON.stringify(sourceSubjects)).map((s, idx) => ({
+          ...s,
+          id: `SUB_G${targetG}_${idx}_${s.name}`
+        }));
+        AppState.classes.filter(c => c.gradeId == targetG).forEach(c => {
+          syncAssignmentsForClass(c.id, targetG);
+        });
+        showToast(`已成功將科目設定複製至 ${targetG} 年級！`, 'success');
+      }
+
+      saveState();
+      renderSubjectsRoomsModule();
+    });
+
+    document.getElementById('btn-add-special-room').addEventListener('click', () => {
+      const name = document.getElementById('input-new-room-name').value.trim();
+      const cap = parseInt(document.getElementById('input-new-room-cap').value, 10) || 1;
+      const teachers = document.getElementById('input-new-room-teachers').value.split(',').map(s => s.trim()).filter(Boolean);
+      const subjects = document.getElementById('input-new-room-subjects').value.split(',').map(s => s.trim()).filter(Boolean);
+
+      if (!name) { showToast('請輸入科任教室名稱', 'error'); return; }
+
+      const roomId = `ROOM_${Date.now()}`;
+      AppState.specialRooms.push({ id: roomId, name, capacity: cap, boundTeachers: teachers, boundSubjects: subjects });
+
+      saveState();
+      renderSubjectsRoomsModule();
+      document.getElementById('input-new-room-name').value = '';
+      document.getElementById('input-new-room-teachers').value = '';
+      document.getElementById('input-new-room-subjects').value = '';
+      showToast(`已建立科任教室【${name}】`, 'success');
+    });
+
+    function deleteSpecialRoom(roomId) {
+      if (!confirm('確定刪除此科任教室嗎？')) return;
+      AppState.specialRooms = AppState.specialRooms.filter(r => r.id !== roomId);
+      saveState();
+      renderSubjectsRoomsModule();
+      showToast('科任教室已刪除', 'info');
+    }
+
+    // MODULE 3: 配課矩陣
+    let assignmentGradeView = 'ALL';
+
+    function renderAssignmentsModule() {
+      const pillsContainer = document.getElementById('assignment-grade-pills');
+      pillsContainer.innerHTML = '';
+
+      const presentGrades = Array.from(new Set(AppState.classes.map(c => c.gradeId))).sort((a,b)=>a-b);
+
+      const allBtn = document.createElement('button');
+      allBtn.className = `px-2.5 py-1 text-xs rounded-md font-medium ${assignmentGradeView === 'ALL' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`;
+      allBtn.textContent = '顯示全部年級';
+      allBtn.onclick = () => { assignmentGradeView = 'ALL'; renderAssignmentsModule(); };
+      pillsContainer.appendChild(allBtn);
+
+      presentGrades.forEach(g => {
+        const btn = document.createElement('button');
+        btn.className = `px-2.5 py-1 text-xs rounded-md font-medium ${assignmentGradeView == g ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`;
+        btn.textContent = `${g} 年級`;
+        btn.onclick = () => { assignmentGradeView = g; renderAssignmentsModule(); };
+        pillsContainer.appendChild(btn);
+      });
+
+      const container = document.getElementById('container-assignment-matrix');
+      container.innerHTML = '';
+
+      const targetGrades = assignmentGradeView === 'ALL' ? presentGrades : [parseInt(assignmentGradeView, 10)];
+
+      if (targetGrades.length === 0 || AppState.classes.length === 0) {
+        container.innerHTML = `<div class="bg-white p-8 rounded-xl text-center text-slate-400 border border-slate-200">尚無班級資料，請先至功能 1 建立班級。</div>`;
+        return;
+      }
+
+      targetGrades.forEach(gradeId => {
+        const gradeClasses = AppState.classes.filter(c => c.gradeId == gradeId);
+        const gradeSubjects = ensureGradeSubjects(gradeId);
+
+        if (gradeClasses.length === 0) return;
+
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden';
+
+        let theadHtml = `
+          <thead>
+            <tr class="bg-slate-100 text-[11px] text-slate-700 uppercase border-b border-slate-200">
+              <th class="px-4 py-3 bg-slate-200 text-slate-800 font-bold border-r border-slate-300 w-36 sticky left-0 z-10">
+                ${gradeId} 年級班級
+              </th>
+              ${gradeSubjects.map(s => `
+                <th class="px-3 py-2 text-center border-r border-slate-200 min-w-[120px]">
+                  <div class="font-bold text-slate-800">${s.name}</div>
+                  <div class="text-[10px] text-slate-500 font-normal mt-0.5">每週 ${s.weeklyPeriods} 節</div>
+                </th>
+              `).join('')}
+            </tr>
+          </thead>
+        `;
+
+        let tbodyHtml = '<tbody class="divide-y divide-slate-200">';
+        gradeClasses.forEach(c => {
+          tbodyHtml += `<tr class="hover:bg-slate-50 transition border-b border-slate-200">`;
+          tbodyHtml += `
+            <td class="px-4 py-2.5 font-bold text-slate-800 bg-slate-50 border-r border-slate-200 sticky left-0 z-10">
+              <div class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                ${c.className}
+              </div>
+            </td>
+          `;
+
+          gradeSubjects.forEach(s => {
+            const assignment = AppState.assignments.find(a => a.classId === c.id && a.subjectId === s.id);
+            const teacher = assignment ? assignment.teacherName : '';
+
+            tbodyHtml += `
+              <td class="px-2 py-1.5 border-r border-slate-200 text-center">
+                <input type="text" value="${teacher}" placeholder="任課教師" class="w-full text-center border border-slate-200 hover:border-amber-400 focus:border-amber-500 rounded px-2 py-1 bg-white text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-400" onchange="updateAssignmentTeacher('${c.id}', ${gradeId}, '${s.id}', '${s.name}', ${s.weeklyPeriods}, this.value)">
+              </td>
+            `;
+          });
+          tbodyHtml += `</tr>`;
+        });
+        tbodyHtml += '</tbody>';
+
+        card.innerHTML = `
+          <div class="px-5 py-3 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200 flex items-center justify-between">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <i data-lucide="bookmark" class="w-4 h-4 text-amber-600"></i>
+              ${gradeId} 年級配課表 (共 ${gradeClasses.length} 班 · ${gradeSubjects.length} 科目 · 週節數合計 ${gradeSubjects.reduce((a,b)=>a+b.weeklyPeriods,0)} 節)
+            </h3>
+          </div>
+          <div class="overflow-x-auto custom-scrollbar">
+            <table class="w-full text-xs text-left text-slate-600">
+              ${theadHtml}
+              ${tbodyHtml}
+            </table>
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+
+      renderTeacherWorkloads();
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function updateAssignmentTeacher(classId, gradeId, subjectId, subjectName, weeklyPeriods, teacherName) {
+      let assignment = AppState.assignments.find(a => a.classId === classId && a.subjectId === subjectId);
+
+      if (!assignment) {
+        assignment = {
+          classId,
+          gradeId,
+          subjectId,
+          subjectName,
+          teacherName: teacherName.trim(),
+          weeklyPeriods,
+          roomId: null
+        };
+        AppState.assignments.push(assignment);
+      } else {
+        assignment.teacherName = teacherName.trim();
+        assignment.subjectName = subjectName;
+        assignment.weeklyPeriods = weeklyPeriods;
+      }
+
+      saveState();
+      renderTeacherWorkloads();
+    }
+
+    function renderTeacherWorkloads() {
+      const grid = document.getElementById('grid-teacher-workloads');
+      grid.innerHTML = '';
+
+      const loads = {};
+      AppState.assignments.forEach(a => {
+        const t = (a.teacherName || '').trim();
+        if (t && !t.startsWith('導師_C_') && !t.startsWith('導師_c_') && !t.includes('178917')) {
+          loads[t] = (loads[t] || 0) + (a.weeklyPeriods || 0);
+        }
+      });
+
+      const teachers = Object.keys(loads).sort();
+      if (teachers.length === 0) {
+        grid.innerHTML = '<div class="col-span-full text-center text-slate-400 py-3 text-xs">尚未指派任何教師</div>';
+        return;
+      }
+
+      teachers.forEach(t => {
+        const periods = loads[t];
+        const isOverload = periods > 24;
+        const card = document.createElement('div');
+        card.className = `p-3 rounded-lg border text-xs ${isOverload ? 'bg-amber-50 border-amber-300' : 'bg-slate-50 border-slate-200'}`;
+        card.innerHTML = `
+          <div class="font-bold text-slate-800 truncate">${t}</div>
+          <div class="flex items-center justify-between mt-1">
+            <span class="text-slate-500 text-[11px]">每週總節數:</span>
+            <span class="font-bold ${isOverload ? 'text-amber-700 font-mono' : 'text-slate-700 font-mono'}">${periods} 節</span>
+          </div>
+          ${isOverload ? '<div class="text-[10px] text-amber-700 font-medium mt-1">⚠️ 授課節數偏高</div>' : ''}
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    document.getElementById('btn-auto-assign-homeroom').addEventListener('click', () => {
+      let count = 0;
+      AppState.classes.forEach(c => {
+        const homeroom = `${c.className}導師`;
+        const subjects = ensureGradeSubjects(c.gradeId);
+        subjects.forEach(s => {
+          const isHomeroomSubject = s.name.includes('國語') || s.name.includes('數學') || s.name.includes('生活') || s.name.includes('綜合') || s.name.includes('彈性');
+          const isSpecialist = s.name.includes('英語') || s.name.includes('自然') || s.name.includes('藝文') || s.name.includes('音樂') || s.name.includes('體育') || s.name.includes('健體') || s.name.includes('資訊') || s.name.includes('科技') || s.name.includes('本土');
+          
+          if (isHomeroomSubject && !isSpecialist) {
+            const a = AppState.assignments.find(x => x.classId === c.id && x.subjectId === s.id);
+            if (a) {
+              a.teacherName = homeroom;
+              count++;
+            }
+          }
+        });
+      });
+      saveState();
+      renderAssignmentsModule();
+      showToast(`已為各班導師領域配置【班級導師】(${count} 門課程)！`, 'success');
+    });
+
+    const btnClearFake = document.getElementById('btn-clear-fake-teachers');
+    if (btnClearFake) {
+      btnClearFake.addEventListener('click', () => {
+        let cleared = 0;
+        AppState.assignments.forEach(a => {
+          if (a.teacherName && (a.teacherName.startsWith('導師_') || a.teacherName.includes('導師_') || a.teacherName.includes('178917') || a.teacherName.endsWith('導師'))) {
+            a.teacherName = '';
+            cleared++;
+          }
+        });
+        saveState();
+        renderAssignmentsModule();
+        showToast(`已成功清除 ${cleared} 筆導師配課，還原為乾淨未配課狀態！`, 'success');
+      });
+    }
+
+    document.getElementById('btn-copy-assignment-parallel').addEventListener('click', () => {
+      const allGrades = Array.from(new Set(AppState.classes.map(c => c.gradeId)));
+      allGrades.forEach(g => {
+        const gClasses = AppState.classes.filter(c => c.gradeId === g);
+        if (gClasses.length >= 2) {
+          const firstClass = gClasses[0];
+          const firstAssignments = AppState.assignments.filter(a => a.classId === firstClass.id);
+
+          for (let i = 1; i < gClasses.length; i++) {
+            const targetClass = gClasses[i];
+            firstAssignments.forEach(sourceA => {
+              const targetA = AppState.assignments.find(a => a.classId === targetClass.id && a.subjectId === sourceA.subjectId);
+              if (targetA && sourceA.teacherName && !sourceA.teacherName.endsWith('導師') && !sourceA.teacherName.startsWith('導師_')) {
+                targetA.teacherName = sourceA.teacherName;
+              }
+            });
+          }
+        }
+      });
+      saveState();
+      renderAssignmentsModule();
+      showToast('已將各年級 1 班科任教師複製至同平行班！', 'success');
+    });
+
+    document.getElementById('btn-export-assignments-excel').addEventListener('click', () => {
+      if (AppState.classes.length === 0) { showToast('目前尚無配課資料', 'error'); return; }
+      const wb = XLSX.utils.book_new();
+      const presentGrades = Array.from(new Set(AppState.classes.map(c => c.gradeId))).sort((a,b)=>a-b);
+
+      presentGrades.forEach(g => {
+        const gClasses = AppState.classes.filter(c => c.gradeId === g);
+        const gSubjects = ensureGradeSubjects(g);
+        const data = [];
+
+        gClasses.forEach(c => {
+          const row = { "年級": `${g}年級`, "班級名稱": c.className };
+          gSubjects.forEach(s => {
+            const a = AppState.assignments.find(x => x.classId === c.id && x.subjectId === s.id);
+            row[`${s.name}(${s.weeklyPeriods}節)`] = a ? a.teacherName : '';
+          });
+          data.push(row);
+        });
+
+        const ws = XLSX.utils.json_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, `${g}年級配課表`);
+      });
+
+      XLSX.writeFile(wb, "全校各年級任教老師配課表.xlsx");
+      showToast('配課表格已匯出為 Excel 多年級工作表檔案', 'success');
+    });
+
+    document.getElementById('input-upload-assignments-excel').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          let updated = 0;
+
+          workbook.SheetNames.forEach(sheetName => {
+            const sheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(sheet);
+
+            json.forEach(row => {
+              const className = String(row['班級名稱'] || row['班級'] || '').trim();
+              const cls = AppState.classes.find(c => c.className === className);
+              if (cls) {
+                const gSubjects = ensureGradeSubjects(cls.gradeId);
+                gSubjects.forEach(s => {
+                  const val = row[s.name] || row[`${s.name}(${s.weeklyPeriods}節)`];
+                  if (val !== undefined) {
+                    const teacher = String(val).trim();
+                    let a = AppState.assignments.find(x => x.classId === cls.id && x.subjectId === s.id);
+                    if (!a) {
+                      a = { classId: cls.id, gradeId: cls.gradeId, subjectId: s.id, subjectName: s.name, teacherName: teacher, weeklyPeriods: s.weeklyPeriods, roomId: null };
+                      AppState.assignments.push(a);
+                    } else {
+                      a.teacherName = teacher;
+                    }
+                    updated++;
+                  }
+                });
+              }
+            });
+          });
+
+          saveState();
+          renderAssignmentsModule();
+          showToast(`成功從 Excel 匯入並更新 ${updated} 筆配課資料！`, 'success');
+        } catch (err) {
+          showToast('Excel 配課匯入失敗，請確認檔案格式。', 'error');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      e.target.value = '';
+    });
+
+    // MODULE 4: 排課作業與排課引擎
+    let currentTimetableView = 'class';
+
+    function renderSchedulingModule() {
+      populateSchedulingDropdowns();
+      renderPreScheduleList();
+      renderDailyRulesList();
+      renderTeacherMutexList();
+      renderActiveTimetable();
+    }
+
+    function populateSchedulingDropdowns() {
+      const teachers = new Set();
+      AppState.assignments.forEach(a => {
+        const t = (a.teacherName || '').trim();
+        if (t && !t.startsWith('導師_C_') && !t.startsWith('導師_c_') && !t.includes('178917')) {
+          teachers.add(t);
+        }
+      });
+      const teacherArray = Array.from(teachers).sort();
+
+      const selectPreTeacher = document.getElementById('select-pre-teacher-name');
+      const selectDailyTeacher = document.getElementById('select-daily-rule-teacher');
+      const selectMutex1 = document.getElementById('select-mutex-teacher-1');
+      const selectMutex2 = document.getElementById('select-mutex-teacher-2');
+
+      const teacherOptions = teacherArray.map(t => `<option value="${t}">${t}</option>`).join('');
+
+      selectPreTeacher.innerHTML = teacherOptions;
+      selectDailyTeacher.innerHTML = `<option value="ALL">全體教師 (通用規則)</option>` + teacherOptions;
+      selectMutex1.innerHTML = teacherOptions;
+      selectMutex2.innerHTML = teacherOptions;
+
+      const selectPreClass = document.getElementById('select-pre-class-id');
+      const prevClassVal = selectPreClass.value;
+      selectPreClass.innerHTML = AppState.classes.map(c => `<option value="${c.id}">${c.className}</option>`).join('');
+      if (prevClassVal && AppState.classes.some(c => c.id === prevClassVal)) {
+        selectPreClass.value = prevClassVal;
+      }
+
+      updatePreScheduleSubjectsDropdown();
+
+      const selectViewTarget = document.getElementById('select-view-target');
+      const labelViewTarget = document.getElementById('label-view-target');
+      const prevTargetVal = selectViewTarget.value;
+
+      if (currentTimetableView === 'class') {
+        labelViewTarget.textContent = '選擇班級：';
+        selectViewTarget.innerHTML = AppState.classes.map((c, idx) => `<option value="${c.id}" ${idx === 0 ? 'selected' : ''}>${c.className}</option>`).join('');
+        if (prevTargetVal && AppState.classes.some(c => c.id === prevTargetVal)) {
+          selectViewTarget.value = prevTargetVal;
+        } else if (AppState.classes.length > 0) {
+          selectViewTarget.value = AppState.classes[0].id;
+        }
+      } else if (currentTimetableView === 'teacher') {
+        labelViewTarget.textContent = '選擇教師：';
+        selectViewTarget.innerHTML = teacherArray.map((t, idx) => `<option value="${t}" ${idx === 0 ? 'selected' : ''}>${t}</option>`).join('');
+        if (prevTargetVal && teacherArray.includes(prevTargetVal)) {
+          selectViewTarget.value = prevTargetVal;
+        } else if (teacherArray.length > 0) {
+          selectViewTarget.value = teacherArray[0];
+        }
+      } else if (currentTimetableView === 'room') {
+        labelViewTarget.textContent = '選擇科任教室：';
+        selectViewTarget.innerHTML = AppState.specialRooms.map((r, idx) => `<option value="${r.id}" ${idx === 0 ? 'selected' : ''}>${r.name}</option>`).join('');
+        if (prevTargetVal && AppState.specialRooms.some(r => r.id === prevTargetVal)) {
+          selectViewTarget.value = prevTargetVal;
+        } else if (AppState.specialRooms.length > 0) {
+          selectViewTarget.value = AppState.specialRooms[0].id;
+        }
+      } else {
+        labelViewTarget.textContent = '檢視範圍：';
+        selectViewTarget.innerHTML = `<option value="ALL">全校所有班級總表</option>`;
+      }
+    }
+
+    function updatePreScheduleSubjectsDropdown() {
+      const classId = document.getElementById('select-pre-class-id').value;
+      const selectPreSubject = document.getElementById('select-pre-class-subject');
+      const cls = AppState.classes.find(c => c.id === classId);
+
+      if (cls) {
+        const subjects = ensureGradeSubjects(cls.gradeId);
+        selectPreSubject.innerHTML = subjects.map(s => `<option value="${s.id}">${s.name} (${s.weeklyPeriods}節)</option>`).join('');
+      } else {
+        selectPreSubject.innerHTML = '';
+      }
+    }
+
+    document.getElementById('select-pre-class-id').addEventListener('change', updatePreScheduleSubjectsDropdown);
+
+    document.getElementById('tab-pre-teacher').addEventListener('click', () => {
+      document.getElementById('tab-pre-teacher').className = 'flex-1 py-1 rounded-md bg-white text-indigo-700 shadow-sm text-center font-bold';
+      document.getElementById('tab-pre-class').className = 'flex-1 py-1 rounded-md text-slate-600 hover:text-slate-900 text-center font-medium';
+      document.getElementById('form-pre-teacher').classList.remove('hidden');
+      document.getElementById('form-pre-class').classList.add('hidden');
+    });
+
+    document.getElementById('tab-pre-class').addEventListener('click', () => {
+      document.getElementById('tab-pre-class').className = 'flex-1 py-1 rounded-md bg-white text-indigo-700 shadow-sm text-center font-bold';
+      document.getElementById('tab-pre-teacher').className = 'flex-1 py-1 rounded-md text-slate-600 hover:text-slate-900 text-center font-medium';
+      document.getElementById('form-pre-class').classList.remove('hidden');
+      document.getElementById('form-pre-teacher').classList.add('hidden');
+    });
+
+    document.getElementById('btn-add-pre-teacher').addEventListener('click', () => {
+      const teacher = document.getElementById('select-pre-teacher-name').value;
+      const day = parseInt(document.getElementById('select-pre-teacher-day').value, 10);
+      const period = parseInt(document.getElementById('select-pre-teacher-period').value, 10);
+      const type = document.getElementById('select-pre-teacher-type').value;
+
+      if (!teacher) { showToast('請選擇教師', 'error'); return; }
+
+      AppState.preTeacher = AppState.preTeacher.filter(p => !(p.teacherName === teacher && p.day === day && p.period === period));
+      AppState.preTeacher.push({ teacherName: teacher, day, period, type });
+
+      saveState();
+      renderPreScheduleList();
+      showToast(`已新增教師【${teacher}】預排設定`, 'success');
+    });
+
+    document.getElementById('btn-add-pre-class').addEventListener('click', () => {
+      const classId = document.getElementById('select-pre-class-id').value;
+      const subjectId = document.getElementById('select-pre-class-subject').value;
+      const day = parseInt(document.getElementById('select-pre-class-day').value, 10);
+      const period = parseInt(document.getElementById('select-pre-class-period').value, 10);
+      const type = document.getElementById('select-pre-class-type').value;
+
+      if (!classId || !subjectId) { showToast('請選擇班級與科目', 'error'); return; }
+
+      AppState.preClassSubject = AppState.preClassSubject.filter(p => !(p.classId === classId && p.day === day && p.period === period));
+      AppState.preClassSubject.push({ classId, subjectId, day, period, type });
+
+      saveState();
+      renderPreScheduleList();
+      showToast('已新增班級科目預排設定', 'success');
+    });
+
+    function renderPreScheduleList() {
+      const list = document.getElementById('list-preschedule-rules');
+      list.innerHTML = '';
+      const dayNames = { 1: '週一', 2: '週二', 3: '週三', 4: '週四', 5: '週五' };
+
+      const all = [];
+      (AppState.preTeacher || []).forEach((p, i) => all.push({ ...p, kind: 'teacher', originalIdx: i }));
+      (AppState.preClassSubject || []).forEach((p, i) => all.push({ ...p, kind: 'class', originalIdx: i }));
+
+      if (all.length === 0) {
+        list.innerHTML = '<div class="text-slate-400 py-2 text-center">尚無預排規則</div>';
+        return;
+      }
+
+      all.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'bg-slate-50 border border-slate-200 p-2 rounded flex items-center justify-between';
+        
+        let label = '';
+        if (item.kind === 'teacher') {
+          label = `教師【${item.teacherName}】${dayNames[item.day]} 第${item.period}節：<strong class="${item.type === 'must' ? 'text-emerald-600' : 'text-rose-600'}">${item.type === 'must' ? '一定排' : '不排'}</strong>`;
+        } else {
+          const cls = AppState.classes.find(c => c.id === item.classId);
+          let subName = item.subjectId;
+          if (cls && AppState.gradeSubjects[cls.gradeId]) {
+            const sub = AppState.gradeSubjects[cls.gradeId].find(s => s.id === item.subjectId);
+            if (sub) subName = sub.name;
+          }
+          label = `班級【${cls ? cls.className : item.classId}】科目【${subName}】${dayNames[item.day]} 第${item.period}節：<strong class="${item.type === 'must' ? 'text-emerald-600' : 'text-rose-600'}">${item.type === 'must' ? '一定排' : '不排'}</strong>`;
+        }
+
+        div.innerHTML = `
+          <span>${label}</span>
+          <button class="text-rose-500 hover:text-rose-700 p-1" onclick="deletePreRule('${item.kind}', ${item.originalIdx})">
+            <i data-lucide="trash" class="w-3.5 h-3.5"></i>
+          </button>
+        `;
+        list.appendChild(div);
+      });
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function deletePreRule(kind, idx) {
+      if (kind === 'teacher') AppState.preTeacher.splice(idx, 1);
+      else AppState.preClassSubject.splice(idx, 1);
+      saveState();
+      renderPreScheduleList();
+    }
+
+    document.getElementById('btn-add-daily-rule').addEventListener('click', () => {
+      const teacher = document.getElementById('select-daily-rule-teacher').value;
+      const day = document.getElementById('select-daily-rule-day').value;
+      const type = document.getElementById('select-daily-rule-type').value;
+      const periods = parseInt(document.getElementById('select-daily-rule-periods').value, 10);
+
+      AppState.dailyTeacherRules.push({
+        teacherName: teacher,
+        day: day === 'ALL' ? null : parseInt(day, 10),
+        type,
+        periods
+      });
+
+      saveState();
+      renderDailyRulesList();
+      showToast('已新增每日排課條件', 'success');
+    });
+
+    function renderDailyRulesList() {
+      const list = document.getElementById('list-daily-rules');
+      list.innerHTML = '';
+      const dayNames = { 1: '週一', 2: '週二', 3: '週三', 4: '週四', 5: '週五' };
+      const typeNames = { max: '最多排', min: '最少排', fixed: '固定排', forbid: '不排' };
+
+      if ((AppState.dailyTeacherRules || []).length === 0) {
+        list.innerHTML = '<div class="text-slate-400 py-2 text-center">尚無每日排課條件</div>';
+        return;
+      }
+
+      AppState.dailyTeacherRules.forEach((r, idx) => {
+        const div = document.createElement('div');
+        div.className = 'bg-slate-50 border border-slate-200 p-2 rounded flex items-center justify-between';
+        const dayStr = r.day ? dayNames[r.day] : '每天';
+        const teacherStr = r.teacherName === 'ALL' ? '全體教師' : `教師【${r.teacherName}】`;
+        div.innerHTML = `
+          <span>${teacherStr} (${dayStr})：<strong>${typeNames[r.type]} ${r.type === 'forbid' ? '0' : r.periods} 節</strong></span>
+          <button class="text-rose-500 hover:text-rose-700 p-1" onclick="deleteDailyRule(${idx})">
+            <i data-lucide="trash" class="w-3.5 h-3.5"></i>
+          </button>
+        `;
+        list.appendChild(div);
+      });
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function deleteDailyRule(idx) {
+      AppState.dailyTeacherRules.splice(idx, 1);
+      saveState();
+      renderDailyRulesList();
+    }
+
+    document.getElementById('btn-add-teacher-mutex').addEventListener('click', () => {
+      const t1 = document.getElementById('select-mutex-teacher-1').value;
+      const t2 = document.getElementById('select-mutex-teacher-2').value;
+
+      if (!t1 || !t2 || t1 === t2) {
+        showToast('請選擇兩位不同教師建立互斥', 'error');
+        return;
+      }
+
+      AppState.teacherMutexes.push({ teachers: [t1, t2] });
+      saveState();
+      renderTeacherMutexList();
+      showToast(`已建立【${t1}】與【${t2}】互斥設定`, 'success');
+    });
+
+    function renderTeacherMutexList() {
+      const list = document.getElementById('list-teacher-mutexes');
+      list.innerHTML = '';
+
+      if ((AppState.teacherMutexes || []).length === 0) {
+        list.innerHTML = '<div class="text-slate-400 py-2 text-center">尚無教師互斥規則</div>';
+        return;
+      }
+
+      AppState.teacherMutexes.forEach((m, idx) => {
+        const div = document.createElement('div');
+        div.className = 'bg-slate-50 border border-slate-200 p-2 rounded flex items-center justify-between';
+        div.innerHTML = `
+          <span>互斥組：<strong class="text-purple-700">${(m.teachers || []).join(' ⚡ ')}</strong></span>
+          <button class="text-rose-500 hover:text-rose-700 p-1" onclick="deleteMutexRule(${idx})">
+            <i data-lucide="trash" class="w-3.5 h-3.5"></i>
+          </button>
+        `;
+        list.appendChild(div);
+      });
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function deleteMutexRule(idx) {
+      AppState.teacherMutexes.splice(idx, 1);
+      saveState();
+      renderTeacherMutexList();
+    }
+
+    document.querySelectorAll('.view-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.view-tab').forEach(b => {
+          b.classList.remove('active', 'bg-white', 'text-slate-900', 'shadow-sm');
+          b.classList.add('text-slate-600');
+        });
+        btn.classList.add('active', 'bg-white', 'text-slate-900', 'shadow-sm');
+        btn.classList.remove('text-slate-600');
+
+        currentTimetableView = btn.getAttribute('data-view');
+        cancelSwapSelection();
+        populateSchedulingDropdowns();
+        renderActiveTimetable();
+      });
+    });
+
+    document.getElementById('select-view-target').addEventListener('change', () => {
+      cancelSwapSelection();
+      renderActiveTimetable();
+    });
+
+    // =========================================================================
+    // 手動調課模組與即時防呆檢核引擎 (雙模式支援：班級課表 + 教師課表)
+    // =========================================================================
+    let selectedSwapSlot = null;
+    let manualSwapHistory = [];
+
+    window.closeSwapConflictModal = function() {
+      const modal = document.getElementById('modal-swap-conflict');
+      if (modal) modal.classList.add('hidden');
+    };
+
+    function showSwapConflictModal(errorMessage) {
+      const modal = document.getElementById('modal-swap-conflict');
+      const textDiv = document.getElementById('text-swap-conflict-reason');
+      if (textDiv) textDiv.innerHTML = errorMessage;
+      if (modal) {
+        modal.classList.remove('hidden');
+        if (window.lucide) lucide.createIcons();
+      } else {
+        alert('⚠️ 無法調課 (違反排課限制，已維持原狀)：\n\n' + errorMessage);
+      }
+    }
+
+    window.cancelSwapSelection = function() {
+      selectedSwapSlot = null;
+      const badge = document.getElementById('swap-status-badge');
+      if (badge) badge.classList.add('hidden');
+      const hint = document.getElementById('label-swap-hint');
+      if (hint) hint.textContent = '點選課表中任意一堂課（來源），再點選第二堂課或空白節次（目標）即可對調或移動。';
+      renderActiveTimetable();
+    };
+
+    window.undoLastSwap = function() {
+      if (manualSwapHistory.length === 0) return;
+      const last = manualSwapHistory.pop();
+      const { classId, slotAKey, slotBKey, unitA, unitB } = last;
+
+      if (!AppState.timetable[classId]) AppState.timetable[classId] = {};
+      if (unitA) AppState.timetable[classId][slotAKey] = unitA;
+      else delete AppState.timetable[classId][slotAKey];
+
+      if (unitB) AppState.timetable[classId][slotBKey] = unitB;
+      else delete AppState.timetable[classId][slotBKey];
+
+      saveState();
+      selectedSwapSlot = null;
+      renderActiveTimetable();
+
+      const undoBtn = document.getElementById('btn-undo-swap');
+      if (undoBtn && manualSwapHistory.length === 0) {
+        undoBtn.classList.add('hidden');
+      }
+
+      showToast('↩️ 已復原上一步手動調課！', 'info');
+    };
+
+    function validateManualSwap(classId, slotAKey, slotBKey) {
+      const cls = AppState.classes.find(c => c.id === classId);
+      if (!cls) return { valid: false, error: '找不到班級資料' };
+
+      const unitA = AppState.timetable[classId]?.[slotAKey] || null;
+      const unitB = AppState.timetable[classId]?.[slotBKey] || null;
+      if (!unitA && !unitB) return { valid: false, error: '選取的兩個時段皆為空堂，無需調動。' };
+
+      const gradeSlots = {
+        1: { 1: halfDay(), 2: fullDay(), 3: halfDay(), 4: halfDay(), 5: halfDay() },
+        2: { 1: halfDay(), 2: fullDay(), 3: halfDay(), 4: halfDay(), 5: halfDay() },
+        3: { 1: fullDay(), 2: fullDay(), 3: halfDay(), 4: fullDay(), 5: halfDay() },
+        4: { 1: fullDay(), 2: fullDay(), 3: halfDay(), 4: fullDay(), 5: halfDay() },
+        5: { 1: fullDay(), 2: fullDay(), 3: halfDay(), 4: fullDay(), 5: fullDay() },
+        6: { 1: fullDay(), 2: fullDay(), 3: halfDay(), 4: fullDay(), 5: fullDay() }
+      };
+      const dayNames = { 1: '週一', 2: '週二', 3: '週三', 4: '週四', 5: '週五' };
+
+      const checks = [
+        { targetUnit: unitA, fromSlot: slotAKey, toSlot: slotBKey },
+        { targetUnit: unitB, fromSlot: slotBKey, toSlot: slotAKey }
+      ];
+
+      for (const item of checks) {
+        const targetUnit = item.targetUnit;
+        if (!targetUnit) continue;
+
+        const toSlot = item.toSlot;
+        const fromSlot = item.fromSlot;
+        const [d, p] = toSlot.split('-').map(Number);
+        const validP = (gradeSlots[cls.gradeId] && gradeSlots[cls.gradeId][d]) ? gradeSlots[cls.gradeId][d] : fullDay();
+
+        // 1. 年級作息檢查
+        if (!validP.includes(p)) {
+          return { valid: false, error: `【${cls.className}】在 ${dayNames[d]} 第 ${p} 節為半天放學時段，依作息規定不可排課！` };
+        }
+
+        // 2. 班級科目固定一定排鎖定
+        const mustClass = (AppState.preClassSubject || []).some(
+          r => r.type === 'must' && r.classId === classId && r.subjectId === targetUnit.subjectId && `${r.day}-${r.period}` === fromSlot
+        );
+        if (mustClass) return { valid: false, error: `【${targetUnit.subjectName}】原時段已被鎖定為【指定一定排】，不可調動！` };
+
+        const t = (targetUnit.teacherName || '').trim();
+        if (t) {
+          // 3. 教師指定一定排鎖定
+          const mustTeacher = (AppState.preTeacher || []).some(
+            r => r.type === 'must' && r.teacherName === t && `${r.day}-${r.period}` === fromSlot
+          );
+          if (mustTeacher) return { valid: false, error: `【${t}】老師原時段已被鎖定為【指定一定排】，不可調動！` };
+
+          // 4. 教師指定不排時段
+          const isForbid = (AppState.preTeacher || []).some(
+            r => (r.teacherName === t || r.teacherName === 'ALL') && r.day === d && r.period === p && r.type === 'forbid'
+          );
+          if (isForbid) return { valid: false, error: `【${t}】老師在 ${dayNames[d]} 第 ${p} 節已設定為【禁排時段】！` };
+
+          // 5. 教師跨班衝堂檢查
+          for (const [otherCid, grid] of Object.entries(AppState.timetable || {})) {
+            if (otherCid !== classId && grid[toSlot] && grid[toSlot].teacherName === t) {
+              const otherCls = AppState.classes.find(c => c.id === otherCid);
+              return { valid: false, error: `衝堂阻擋：【${t}】老師在 ${dayNames[d]} 第 ${p} 節已在【${otherCls ? otherCls.className : otherCid}】授課！` };
+            }
+          }
+
+          // 6. 教師互斥檢查
+          for (const m of (AppState.teacherMutexes || [])) {
+            if (m.teachers && m.teachers.includes(t)) {
+              const others = m.teachers.filter(x => x !== t);
+              for (const [otherCid, grid] of Object.entries(AppState.timetable || {})) {
+                if (otherCid !== classId && grid[toSlot] && others.includes(grid[toSlot].teacherName)) {
+                  return { valid: false, error: `互斥衝突：【${t}】與【${grid[toSlot].teacherName}】不可在同時段上課！` };
+                }
+              }
+            }
+          }
+        }
+
+        // 7. 專用教室容量檢查
+        if (targetUnit.roomId) {
+          const room = AppState.specialRooms.find(r => r.id === targetUnit.roomId);
+          const maxCap = (room && room.capacity) ? room.capacity : 1;
+          let occ = 0;
+          for (const [otherCid, grid] of Object.entries(AppState.timetable || {})) {
+            if (otherCid !== classId && grid[toSlot] && grid[toSlot].roomId === targetUnit.roomId) occ++;
+          }
+          if (occ + 1 > maxCap) {
+            return { valid: false, error: `專科教室超載：【${room ? room.name : targetUnit.roomId}】在該節已滿 (${maxCap} 班)！` };
+          }
+        }
+      }
+
+      return { valid: true, error: null };
+    }
+
+    // 班級課表調課點選處理器
+    window.handleCellClickForSwap = function(classId, slotKey) {
+      const cls = AppState.classes.find(c => c.id === classId);
+      const [d, p] = slotKey.split('-').map(Number);
+      const dayNames = { 1: '週一', 2: '週二', 3: '週三', 4: '週四', 5: '週五' };
+      const unit = AppState.timetable[classId]?.[slotKey];
+
+      if (!selectedSwapSlot || selectedSwapSlot.view !== 'class' || selectedSwapSlot.classId !== classId) {
+        selectedSwapSlot = { view: 'class', classId, slotKey };
+        const badge = document.getElementById('swap-status-badge');
+        const textSelected = document.getElementById('text-swap-selected');
+        const hint = document.getElementById('label-swap-hint');
+
+        if (badge) badge.classList.remove('hidden');
+        if (textSelected) {
+          textSelected.textContent = `來源：${dayNames[d]}第${p}節 ${unit ? unit.subjectName : '空堂'}`;
+        }
+        if (hint) {
+          hint.innerHTML = `<span class="font-bold text-amber-800">已選取來源！</span> 請點選欲調動的目標節次或空堂（點選同格取消）。`;
+        }
+        renderActiveTimetable();
+      } else {
+        if (selectedSwapSlot.slotKey === slotKey) {
+          cancelSwapSelection();
+          showToast('已取消調課選取', 'info');
+          return;
+        }
+
+        const slotAKey = selectedSwapSlot.slotKey;
+        const slotBKey = slotKey;
+        const check = validateManualSwap(classId, slotAKey, slotBKey);
+
+        if (!check.valid) {
+          showSwapConflictModal(check.error);
+          return;
+        }
+
+        const unitA = AppState.timetable[classId]?.[slotAKey] ? JSON.parse(JSON.stringify(AppState.timetable[classId][slotAKey])) : null;
+        const unitB = AppState.timetable[classId]?.[slotBKey] ? JSON.parse(JSON.stringify(AppState.timetable[classId][slotBKey])) : null;
+
+        manualSwapHistory.push({
+          classId,
+          slotAKey,
+          slotBKey,
+          unitA,
+          unitB,
+          time: Date.now()
+        });
+
+        if (!AppState.timetable[classId]) AppState.timetable[classId] = {};
+        if (unitB) AppState.timetable[classId][slotAKey] = unitB;
+        else delete AppState.timetable[classId][slotAKey];
+
+        if (unitA) AppState.timetable[classId][slotBKey] = unitA;
+        else delete AppState.timetable[classId][slotBKey];
+
+        saveState();
+        cancelSwapSelection();
+
+        const undoBtn = document.getElementById('btn-undo-swap');
+        if (undoBtn) undoBtn.classList.remove('hidden');
+
+        showToast(`✅ 【${cls ? cls.className : classId}】調課成功！`, 'success');
+      }
+    };
+
+    // 教師課表專屬點選調課處理器
+    window.handleTeacherCellClickForSwap = function(teacherName, slotKey) {
+      const [d, p] = slotKey.split('-').map(Number);
+      const dayNames = { 1: '週一', 2: '週二', 3: '週三', 4: '週四', 5: '週五' };
+
+      let currentUnit = null;
+      let currentClassId = null;
+      for (const [cid, grid] of Object.entries(AppState.timetable || {})) {
+        if (grid[slotKey] && grid[slotKey].teacherName === teacherName) {
+          currentUnit = grid[slotKey];
+          currentClassId = cid;
+          break;
+        }
+      }
+
+      if (!selectedSwapSlot || selectedSwapSlot.view !== 'teacher' || selectedSwapSlot.teacherName !== teacherName) {
+        if (!currentUnit) {
+          showToast('請先點選有排課的節次作為調課來源！', 'info');
+          return;
+        }
+
+        selectedSwapSlot = {
+          view: 'teacher',
+          teacherName,
+          slotKey,
+          classId: currentClassId,
+          unit: currentUnit
+        };
+
+        const badge = document.getElementById('swap-status-badge');
+        const textSelected = document.getElementById('text-swap-selected');
+        const hint = document.getElementById('label-swap-hint');
+
+        if (badge) badge.classList.remove('hidden');
+        if (textSelected) {
+          textSelected.textContent = `來源：【${teacherName}】${dayNames[d]}第${p}節 ${currentUnit.className} ${currentUnit.subjectName}`;
+        }
+        if (hint) {
+          hint.innerHTML = `<span class="font-bold text-amber-800">已選取來源！</span> 請點選欲調往的目標節次或空堂（點選同格取消）。`;
+        }
+        renderActiveTimetable();
+        return;
+      }
+
+      if (selectedSwapSlot.slotKey === slotKey) {
+        cancelSwapSelection();
+        showToast('已取消調課選取', 'info');
+        return;
+      }
+
+      const slotAKey = selectedSwapSlot.slotKey;
+      const slotBKey = slotKey;
+      const classAId = selectedSwapSlot.classId;
+      const unitA = selectedSwapSlot.unit;
+
+      if (!currentUnit || classAId === currentClassId) {
+        const check = validateManualSwap(classAId, slotAKey, slotBKey);
+        if (!check.valid) {
+          showSwapConflictModal(check.error);
+          return;
+        }
+
+        const uA = AppState.timetable[classAId]?.[slotAKey] ? JSON.parse(JSON.stringify(AppState.timetable[classAId][slotAKey])) : null;
+        const uB = AppState.timetable[classAId]?.[slotBKey] ? JSON.parse(JSON.stringify(AppState.timetable[classAId][slotBKey])) : null;
+
+        manualSwapHistory.push({
+          classId: classAId,
+          slotAKey,
+          slotBKey,
+          unitA: uA,
+          unitB: uB,
+          time: Date.now()
+        });
+
+        if (!AppState.timetable[classAId]) AppState.timetable[classAId] = {};
+        if (uB) AppState.timetable[classAId][slotAKey] = uB;
+        else delete AppState.timetable[classAId][slotAKey];
+
+        if (uA) AppState.timetable[classAId][slotBKey] = uA;
+        else delete AppState.timetable[classAId][slotBKey];
+
+        saveState();
+        cancelSwapSelection();
+
+        const undoBtn = document.getElementById('btn-undo-swap');
+        if (undoBtn) undoBtn.classList.remove('hidden');
+
+        const cls = AppState.classes.find(c => c.id === classAId);
+        showToast(`✅ 【${teacherName}】老師 ${cls ? cls.className : ''} 調課成功！`, 'success');
+      } else {
+        showToast('跨班互換涉及雙向班級聯動，建議切換至對應【班級課表】進行微調。', 'info');
+      }
+    };
+
+    function renderActiveTimetable() {
+      const table = document.getElementById('table-active-timetable');
+      let target = document.getElementById('select-view-target').value;
+      const days = getPeriodsRange(5);
+      const dayNames = { 1: '星期一', 2: '星期二', 3: '星期三', 4: '星期四', 5: '星期五' };
+
+      if (!AppState.timetable || Object.keys(AppState.timetable).length === 0) {
+        table.innerHTML = `<tr><td class="py-12 text-slate-400 text-sm">課表尚未排定。請點擊上方【開始智慧排課】按鈕進行科學排課！</td></tr>`;
+        return;
+      }
+
+      if (currentTimetableView === 'class') {
+        if (!target && AppState.classes.length > 0) {
+          target = AppState.classes[0].id;
+          document.getElementById('select-view-target').value = target;
+        }
+
+        const cls = AppState.classes.find(c => c.id === target);
+        document.getElementById('print-target-title').textContent = `班級課表：${cls ? cls.className : target}`;
+
+        let thead = `
+          <thead>
+            <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+              <th class="border border-slate-200 px-3 py-2.5 w-20 bg-slate-200/70">節次</th>
+              ${days.map(d => `<th class="border border-slate-200 px-4 py-2.5 w-1/5">${dayNames[d]}</th>`).join('')}
+            </tr>
+          </thead>
+        `;
+
+        let tbody = '<tbody>';
+        for (let p = 1; p <= 7; p++) {
+          tbody += `<tr class="hover:bg-slate-50/70 border-b border-slate-200">`;
+          tbody += `<td class="border border-slate-200 py-3 font-bold text-slate-700 bg-slate-100/80">第 ${p} 節</td>`;
+
+          for (const d of days) {
+            const slotKey = `${d}-${p}`;
+            const unit = AppState.timetable[target]?.[slotKey];
+            const isSelected = selectedSwapSlot && selectedSwapSlot.view === 'class' && selectedSwapSlot.classId === target && selectedSwapSlot.slotKey === slotKey;
+
+            if (unit) {
+              const isCore = unit.isCore;
+              let cardBg = isCore ? 'bg-indigo-50/90 border-indigo-200 text-indigo-950' : 'bg-emerald-50/90 border-emerald-200 text-emerald-950';
+              let ringClass = '';
+
+              if (isSelected) {
+                cardBg = 'bg-amber-100 border-amber-400 text-amber-950 shadow-md';
+                ringClass = 'ring-4 ring-amber-500 scale-[1.02]';
+              }
+
+              tbody += `
+                <td class="border border-slate-200 p-1.5 text-center align-middle">
+                  <div onclick="handleCellClickForSwap('${target}', '${slotKey}')" class="${cardBg} ${ringClass} border rounded-xl p-2.5 shadow-2xs transition-all hover:shadow-md hover:scale-[1.02] cursor-pointer group select-none">
+                    <div class="font-bold text-sm text-slate-800 flex items-center justify-center gap-1">
+                      <span>${unit.subjectName}</span>
+                      ${isSelected ? '<span class="text-[10px] bg-amber-200 text-amber-800 px-1.5 py-0.2 rounded-full font-bold animate-pulse">待對調</span>' : ''}
+                    </div>
+                    <div class="text-[11px] ${unit.teacherName ? 'text-slate-600' : 'text-rose-500 font-medium'} mt-0.5">${unit.teacherName ? unit.teacherName : '(未配課)'}</div>
+                    ${unit.roomName ? `<div class="text-[10px] bg-teal-100 text-teal-800 rounded-md px-1.5 py-0.5 mt-1 inline-block font-medium">📍 ${unit.roomName}</div>` : ''}
+                    <div class="text-[10px] text-indigo-600 opacity-0 group-hover:opacity-100 transition mt-1 font-medium hidden sm:block">點選調課 ⇄</div>
+                  </div>
+                </td>
+              `;
+            } else {
+              const isSelectedEmpty = selectedSwapSlot && selectedSwapSlot.view === 'class' && selectedSwapSlot.classId === target && selectedSwapSlot.slotKey === slotKey;
+              const emptyBg = isSelectedEmpty
+                ? 'bg-amber-100 border-amber-400 ring-4 ring-amber-500 text-amber-800 font-bold'
+                : 'hover:bg-indigo-50/60 hover:border-indigo-300 text-slate-300 hover:text-indigo-600';
+
+              tbody += `
+                <td class="border border-slate-200 p-1.5 text-center align-middle">
+                  <div onclick="handleCellClickForSwap('${target}', '${slotKey}')" class="border border-dashed border-slate-300 rounded-xl p-3 text-xs transition-all ${emptyBg} cursor-pointer group select-none">
+                    ${isSelectedEmpty ? '已選取空堂' : '<span class="group-hover:hidden">- 空堂 -</span><span class="hidden group-hover:inline font-medium text-indigo-600">+ 可移至此</span>'}
+                  </div>
+                </td>
+              `;
+            }
+          }
+          tbody += `</tr>`;
+        }
+        tbody += '</tbody>';
+        table.innerHTML = thead + tbody;
+      }
+      else if (currentTimetableView === 'teacher') {
+        const teachers = new Set();
+        AppState.assignments.forEach(a => { if (a.teacherName) teachers.add(a.teacherName); });
+        const teacherArray = Array.from(teachers).sort();
+        if (!target && teacherArray.length > 0) {
+          target = teacherArray[0];
+          document.getElementById('select-view-target').value = target;
+        }
+
+        document.getElementById('print-target-title').textContent = `教師課表：${target} 老師`;
+
+        let thead = `
+          <thead>
+            <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+              <th class="border border-slate-200 px-3 py-2 w-20 bg-slate-200/70">節次</th>
+              ${days.map(d => `<th class="border border-slate-200 px-4 py-2 w-1/5">${dayNames[d]}</th>`).join('')}
+            </tr>
+          </thead>
+        `;
+
+        let tbody = '<tbody>';
+        for (let p = 1; p <= 7; p++) {
+          tbody += `<tr class="hover:bg-slate-50/70 border-b border-slate-200">`;
+          tbody += `<td class="border border-slate-200 py-3 font-bold text-slate-700 bg-slate-100/80">第 ${p} 節</td>`;
+
+          for (const d of days) {
+            const slotKey = `${d}-${p}`;
+            let foundUnit = null;
+            for (const [cid, grid] of Object.entries(AppState.timetable || {})) {
+              if (grid[slotKey] && grid[slotKey].teacherName === target) {
+                foundUnit = grid[slotKey];
+                break;
+              }
+            }
+
+            const isSelected = selectedSwapSlot &&
+              selectedSwapSlot.view === 'teacher' &&
+              selectedSwapSlot.teacherName === target &&
+              selectedSwapSlot.slotKey === slotKey;
+
+            if (foundUnit) {
+              let cardBg = isSelected
+                ? 'bg-amber-100 border-amber-400 text-amber-950 shadow-md ring-4 ring-amber-500 scale-[1.02]'
+                : 'bg-amber-50/90 border-amber-200 text-amber-950';
+
+              tbody += `
+                <td class="border border-slate-200 p-1.5 text-center align-middle">
+                  <div onclick="handleTeacherCellClickForSwap('${target}', '${slotKey}')" class="${cardBg} border rounded-xl p-2.5 shadow-2xs transition-all hover:shadow-md hover:scale-[1.02] cursor-pointer group select-none">
+                    <div class="font-bold text-sm text-slate-800 flex items-center justify-center gap-1">
+                      <span>${foundUnit.className}</span>
+                      ${isSelected ? '<span class="text-[10px] bg-amber-200 text-amber-800 px-1.5 py-0.2 rounded-full font-bold animate-pulse">待對調</span>' : ''}
+                    </div>
+                    <div class="text-xs text-amber-800 font-medium mt-0.5">${foundUnit.subjectName}</div>
+                    ${foundUnit.roomName ? `<div class="text-[10px] bg-teal-100 text-teal-800 rounded-md px-1.5 py-0.5 mt-1 inline-block font-medium">📍 ${foundUnit.roomName}</div>` : ''}
+                    <div class="text-[10px] text-indigo-600 opacity-0 group-hover:opacity-100 transition mt-1 font-medium hidden sm:block">點選調課 ⇄</div>
+                  </div>
+                </td>
+              `;
+            } else {
+              const emptyBg = isSelected
+                ? 'bg-amber-100 border-amber-400 ring-4 ring-amber-500 text-amber-800 font-bold'
+                : 'hover:bg-indigo-50/60 hover:border-indigo-300 text-slate-300 hover:text-indigo-600';
+
+              tbody += `
+                <td class="border border-slate-200 p-1.5 text-center align-middle">
+                  <div onclick="handleTeacherCellClickForSwap('${target}', '${slotKey}')" class="border border-dashed border-slate-300 rounded-xl p-3 text-xs transition-all ${emptyBg} cursor-pointer group select-none">
+                    ${isSelected ? '已選取空堂' : '<span class="group-hover:hidden">- 空堂 -</span><span class="hidden group-hover:inline font-medium text-indigo-600">+ 可調至此</span>'}
+                  </div>
+                </td>
+              `;
+            }
+          }
+          tbody += `</tr>`;
+        }
+        tbody += '</tbody>';
+        table.innerHTML = thead + tbody;
+      }
+      else if (currentTimetableView === 'room') {
+        if (!target && AppState.specialRooms.length > 0) {
+          target = AppState.specialRooms[0].id;
+          document.getElementById('select-view-target').value = target;
+        }
+
+        const room = AppState.specialRooms.find(r => r.id === target);
+        document.getElementById('print-target-title').textContent = `科任教室課表：${room ? room.name : target}`;
+
+        let thead = `
+          <thead>
+            <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+              <th class="border border-slate-200 px-3 py-2 w-20">節次</th>
+              ${days.map(d => `<th class="border border-slate-200 px-4 py-2 w-1/5">${dayNames[d]}</th>`).join('')}
+            </tr>
+          </thead>
+        `;
+
+        let tbody = '<tbody>';
+        for (let p = 1; p <= 7; p++) {
+          tbody += `<tr class="hover:bg-slate-50 border-b border-slate-200">`;
+          tbody += `<td class="border border-slate-200 py-3 font-bold text-slate-600 bg-slate-50">第 ${p} 節</td>`;
+
+          for (const d of days) {
+            const slotKey = `${d}-${p}`;
+            let foundUnit = null;
+            for (const [cid, grid] of Object.entries(AppState.timetable || {})) {
+              if (grid[slotKey] && grid[slotKey].roomId === target) {
+                foundUnit = grid[slotKey];
+                break;
+              }
+            }
+
+            if (foundUnit) {
+              tbody += `
+                <td class="border border-slate-200 p-2 text-center align-middle">
+                  <div class="bg-teal-50 border border-teal-200 rounded-lg p-2 text-teal-950 shadow-2xs">
+                    <div class="font-bold text-sm text-slate-800">${foundUnit.className}</div>
+                    <div class="text-xs text-teal-800">${foundUnit.subjectName} (${foundUnit.teacherName || '未配課'})</div>
+                  </div>
+                </td>
+              `;
+            } else {
+              tbody += `<td class="border border-slate-200 p-2 text-slate-300 text-xs">空閒</td>`;
+            }
+          }
+          tbody += `</tr>`;
+        }
+        tbody += '</tbody>';
+        table.innerHTML = thead + tbody;
+      }
+      else {
+        document.getElementById('print-target-title').textContent = `全校所有班級總課表`;
+
+        let thead = `
+          <thead>
+            <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+              <th class="border border-slate-200 px-3 py-2 w-24 sticky left-0 bg-slate-100 z-10">班級</th>
+              ${days.map(d => `
+                <th colspan="7" class="border border-slate-300 px-2 py-1 bg-indigo-50 text-indigo-900 border-r-2 border-r-indigo-200">${dayNames[d]}</th>
+              `).join('')}
+            </tr>
+            <tr class="bg-slate-50 text-[10px] text-slate-600 border-b border-slate-200">
+              <th class="border border-slate-200 py-1 sticky left-0 bg-slate-50 z-10">節次</th>
+              ${days.map(d => `
+                <th class="border border-slate-200 py-1 w-10">1</th>
+                <th class="border border-slate-200 py-1 w-10">2</th>
+                <th class="border border-slate-200 py-1 w-10">3</th>
+                <th class="border border-slate-200 py-1 w-10">4</th>
+                <th class="border border-slate-200 py-1 w-10">5</th>
+                <th class="border border-slate-200 py-1 w-10">6</th>
+                <th class="border border-slate-200 py-1 w-10 border-r-2 border-r-indigo-200">7</th>
+              `).join('')}
+            </tr>
+          </thead>
+        `;
+
+        let tbody = '<tbody>';
+        AppState.classes.forEach(c => {
+          tbody += `<tr class="hover:bg-slate-50 border-b border-slate-200">`;
+          tbody += `<td class="border border-slate-200 py-2 px-2 font-bold text-slate-800 bg-slate-50 sticky left-0 z-10 text-left">${c.className}</td>`;
+
+          for (const d of days) {
+            for (let p = 1; p <= 7; p++) {
+              const slotKey = `${d}-${p}`;
+              const unit = AppState.timetable[c.id]?.[slotKey];
+              const isBorderRight = p === 7 ? 'border-r-2 border-r-indigo-200' : '';
+
+              if (unit) {
+                tbody += `
+                  <td class="border border-slate-200 p-1 text-[10px] leading-tight ${isBorderRight}" title="${unit.subjectName} - ${unit.teacherName}">
+                    <div class="font-bold text-slate-800 truncate">${unit.subjectName}</div>
+                    <div class="text-[9px] text-slate-500 truncate">${unit.teacherName || '(未配課)'}</div>
+                  </td>
+                `;
+              } else {
+                tbody += `<td class="border border-slate-200 p-1 text-slate-200 text-[10px] ${isBorderRight}">-</td>`;
+              }
+            }
+          }
+          tbody += `</tr>`;
+        });
+        tbody += '</tbody>';
+        table.innerHTML = thead + tbody;
+      }
+    }
+
+    // High Speed Timetable Engine
+    class HighSpeedTimetableEngine {
+      constructor(data) {
+        this.days = getPeriodsRange(5);
+        this.periodsPerDay = Number(data.periodsPerDay) || 7;
+        this.classes = Array.isArray(data.classes) ? data.classes : [];
+        this.gradeSubjects = data.gradeSubjects || {};
+        this.specialRooms = Array.isArray(data.specialRooms) ? data.specialRooms : [];
+        this.assignments = Array.isArray(data.assignments) ? data.assignments : [];
+        this.preTeacher = Array.isArray(data.preTeacher) ? data.preTeacher : [];
+        this.preClassSubject = Array.isArray(data.preClassSubject) ? data.preClassSubject : [];
+        this.dailyTeacherRules = Array.isArray(data.dailyTeacherRules) ? data.dailyTeacherRules : [];
+        this.teacherMutexes = Array.isArray(data.teacherMutexes) ? data.teacherMutexes : [];
+        this.mode = data.mode || 'deep';
+        this.aborted = false;
+
+        this.gradeSlots = {
+          1: { 1: halfDay(), 2: fullDay(), 3: halfDay(), 4: halfDay(), 5: halfDay() },
+          2: { 1: halfDay(), 2: fullDay(), 3: halfDay(), 4: halfDay(), 5: halfDay() },
+          3: { 1: fullDay(), 2: fullDay(), 3: halfDay(), 4: fullDay(), 5: halfDay() },
+          4: { 1: fullDay(), 2: fullDay(), 3: halfDay(), 4: fullDay(), 5: halfDay() },
+          5: { 1: fullDay(), 2: fullDay(), 3: halfDay(), 4: fullDay(), 5: fullDay() },
+          6: { 1: fullDay(), 2: fullDay(), 3: halfDay(), 4: fullDay(), 5: fullDay() }
+        };
+      }
+
+      abort() {
+        this.aborted = true;
+      }
+
+      getAvailableSlots(gradeId) {
+        const g = parseInt(gradeId, 10) || 5;
+        const rule = this.gradeSlots[g] || this.gradeSlots[5];
+        const slots = [];
+        for (let d = 1; d <= 5; d++) {
+          const pList = rule[d] || fullDay();
+          for (const p of pList) {
+            slots.push({ day: d, period: p, key: `${d}-${p}` });
+          }
+        }
+        return slots;
+      }
+
+      async solveAsync(onProgress) {
+        const startTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        const slotKeyOf = (idx) => `${Math.floor(idx / 7) + 1}-${(idx % 7) + 1}`;
+        const indexOfSlot = (d, p) => (d - 1) * 7 + (p - 1);
+
+        const diagnostics = [];
+
+        const roomDemand = {};
+        for (const a of this.assignments) {
+          if (a.roomId) {
+            roomDemand[a.roomId] = (roomDemand[a.roomId] || 0) + (a.weeklyPeriods || 0);
+          }
+        }
+        for (const [rid, demand] of Object.entries(roomDemand)) {
+          const room = this.specialRooms.find(r => r.id === rid);
+          const cap = room ? (room.capacity || 1) : 1;
+          const maxPossible = cap * 35;
+          if (demand > maxPossible) {
+            diagnostics.push(`專科教室【${room ? room.name : rid}】需求總節數 (${demand} 節) 超出每週容量上限 (${maxPossible} 節)！`);
+          }
+        }
+
+        const teacherDemand = {};
+        for (const a of this.assignments) {
+          if (a.teacherName) {
+            teacherDemand[a.teacherName] = (teacherDemand[a.teacherName] || 0) + (a.weeklyPeriods || 0);
+          }
+        }
+        for (const [t, demand] of Object.entries(teacherDemand)) {
+          const forbidCount = this.preTeacher.filter(p => p.teacherName === t && p.type === 'forbid').length;
+          const maxSlots = 35 - forbidCount;
+          if (demand > maxSlots) {
+            diagnostics.push(`教師【${t}】每週應授課 ${demand} 節，但扣除禁排時段後僅剩 ${maxSlots} 節可用時段！`);
+          }
+        }
+
+        const unitsTemplate = [];
+        let uid = 1;
+
+        const teacherClassMap = {};
+        for (const a of this.assignments) {
+          if (a && a.teacherName) {
+            if (!teacherClassMap[a.teacherName]) teacherClassMap[a.teacherName] = new Set();
+            teacherClassMap[a.teacherName].add(a.classId);
+          }
+        }
+
+        for (const a of this.assignments) {
+          if (!a) continue;
+          const cls = this.classes.find(c => c && c.id === a.classId);
+          if (!cls) continue;
+          const subjects = (this.gradeSubjects && this.gradeSubjects[cls.gradeId]) || [];
+          const sub = subjects.find(s => s && s.id === a.subjectId);
+
+          const sName = String(a.subjectName || (sub ? sub.name : '') || '未命名科目').trim();
+          const sPeriods = Math.max(0, parseInt(a.weeklyPeriods !== undefined ? a.weeklyPeriods : (sub ? sub.weeklyPeriods : 0), 10) || 0);
+          const tName = String(a.teacherName || '').trim();
+
+          const room = this.specialRooms.find(r => {
+            if (!r) return false;
+            if (a.roomId && r.id === a.roomId) return true;
+            const bTeachers = Array.isArray(r.boundTeachers) ? r.boundTeachers : (typeof r.boundTeachers === 'string' ? r.boundTeachers.split(',').map(x => x.trim()) : []);
+            const bSubjects = Array.isArray(r.boundSubjects) ? r.boundSubjects : (typeof r.boundSubjects === 'string' ? r.boundSubjects.split(',').map(x => x.trim()) : []);
+            return (tName && bTeachers.includes(tName)) && (sName && bSubjects.includes(sName));
+          });
+
+          const validSlots = this.getAvailableSlots(cls.gradeId);
+          const validMask = new Array(35).fill(false);
+          validSlots.forEach(s => {
+            validMask[indexOfSlot(s.day, s.period)] = true;
+          });
+
+          const isCore = sub ? (sub.category === 'core' || ['國語', '數學', '英語', '自然', '社會', '理化'].some(k => sName.includes(k))) : ['國語', '數學', '英語', '自然', '社會', '理化'].some(k => sName.includes(k));
+          const allowDouble = sub ? Boolean(sub.allowDoublePeriod) : false;
+          const isCrossClass = (tName && teacherClassMap[tName] && teacherClassMap[tName].size > 1) || Boolean(room);
+
+          for (let i = 0; i < sPeriods; i++) {
+            unitsTemplate.push({
+              id: uid++,
+              classId: cls.id,
+              className: cls.className,
+              gradeId: cls.gradeId,
+              subjectId: a.subjectId || (sub ? sub.id : `SUB_${sName}`),
+              subjectName: sName,
+              teacherName: tName,
+              roomId: room ? room.id : (a.roomId || null),
+              roomName: room ? room.name : null,
+              isCore,
+              allowDouble,
+              isCrossClass,
+              validMask,
+              slotIdx: -1,
+              isFixed: false
+            });
+          }
+        }
+
+        const classIdMap = {};
+        this.classes.forEach((c, idx) => { classIdMap[c.id] = idx; });
+        const classCount = this.classes.length;
+
+        const mutexMap = {};
+        for (const m of this.teacherMutexes) {
+          if (m && Array.isArray(m.teachers) && m.teachers.length >= 2) {
+            for (let i = 0; i < m.teachers.length; i++) {
+              for (let j = 0; j < m.teachers.length; j++) {
+                if (i !== j) {
+                  const t1 = m.teachers[i], t2 = m.teachers[j];
+                  if (!mutexMap[t1]) mutexMap[t1] = new Set();
+                  mutexMap[t1].add(t2);
+                }
+              }
+            }
+          }
+        }
+
+        const teacherForbidMask = {};
+        for (const p of this.preTeacher) {
+          if (p && p.type === 'forbid' && p.teacherName) {
+            if (!teacherForbidMask[p.teacherName]) teacherForbidMask[p.teacherName] = new Array(35).fill(false);
+            teacherForbidMask[p.teacherName][indexOfSlot(p.day, p.period)] = true;
+          }
+        }
+
+        const classSubjectForbidMask = {};
+        for (const p of this.preClassSubject) {
+          if (p && p.type === 'forbid' && p.classId && p.subjectId) {
+            const k = `${p.classId}_${p.subjectId}`;
+            if (!classSubjectForbidMask[k]) classSubjectForbidMask[k] = new Array(35).fill(false);
+            classSubjectForbidMask[k][indexOfSlot(p.day, p.period)] = true;
+          }
+        }
+
+        const teacherMaxDaily = {};
+        for (const rule of this.dailyTeacherRules) {
+          if (rule && rule.type === 'max' && rule.teacherName) {
+            teacherMaxDaily[rule.teacherName] = rule.periods;
+          }
+        }
+
+        const maxRestarts = this.mode === 'deep' ? 10 : 2;
+        const maxIterPerRound = this.mode === 'deep' ? 15000 : 3000;
+
+        let bestOverallUnits = null;
+        let bestOverallUnplaced = 999999;
+        let totalIterationsSpent = 0;
+
+        for (let restart = 1; restart <= maxRestarts; restart++) {
+          if (this.aborted) break;
+
+          const units = unitsTemplate.map(u => ({ ...u, validMask: [...u.validMask] }));
+          const classGrid = Array.from({ length: classCount }, () => new Int32Array(35).fill(-1));
+          const teacherGrid = {};
+          const teacherDayCount = {};
+          const roomGrid = {};
+
+          const placeUnit = (u, sIdx) => {
+            const cIdx = classIdMap[u.classId];
+            classGrid[cIdx][sIdx] = u.id;
+            u.slotIdx = sIdx;
+            const d = Math.floor(sIdx / 7);
+
+            if (u.teacherName) {
+              if (!teacherGrid[u.teacherName]) teacherGrid[u.teacherName] = new Int32Array(35).fill(-1);
+              teacherGrid[u.teacherName][sIdx] = u.id;
+              if (!teacherDayCount[u.teacherName]) teacherDayCount[u.teacherName] = new Int32Array(5).fill(0);
+              teacherDayCount[u.teacherName][d]++;
+            }
+            if (u.roomId) {
+              if (!roomGrid[u.roomId]) roomGrid[u.roomId] = new Int32Array(35).fill(0);
+              roomGrid[u.roomId][sIdx]++;
+            }
+          };
+
+          const removeUnit = (u) => {
+            const sIdx = u.slotIdx;
+            if (sIdx === -1) return;
+            const cIdx = classIdMap[u.classId];
+            classGrid[cIdx][sIdx] = -1;
+            const d = Math.floor(sIdx / 7);
+
+            if (u.teacherName && teacherGrid[u.teacherName]) {
+              teacherGrid[u.teacherName][sIdx] = -1;
+              if (teacherDayCount[u.teacherName]) {
+                teacherDayCount[u.teacherName][d]--;
+              }
+            }
+            if (u.roomId && roomGrid[u.roomId]) {
+              roomGrid[u.roomId][sIdx]--;
+            }
+            u.slotIdx = -1;
+          };
+
+          const isSlotFeasible = (u, sIdx) => {
+            if (!u.validMask[sIdx]) return false;
+            const cIdx = classIdMap[u.classId];
+            if (classGrid[cIdx][sIdx] !== -1) return false;
+
+            if (u.teacherName && teacherForbidMask[u.teacherName]?.[sIdx]) return false;
+            if (u.teacherName && teacherForbidMask['ALL']?.[sIdx]) return false;
+            if (classSubjectForbidMask[`${u.classId}_${u.subjectId}`]?.[sIdx]) return false;
+
+            if (u.teacherName) {
+              if (teacherGrid[u.teacherName] && teacherGrid[u.teacherName][sIdx] !== -1) return false;
+              const mutex = mutexMap[u.teacherName];
+              if (mutex) {
+                for (const mTeacher of mutex) {
+                  if (teacherGrid[mTeacher] && teacherGrid[mTeacher][sIdx] !== -1) return false;
+                }
+              }
+              const maxD = teacherMaxDaily[u.teacherName] || teacherMaxDaily['ALL'];
+              if (maxD) {
+                const d = Math.floor(sIdx / 7);
+                const curD = (teacherDayCount[u.teacherName] && teacherDayCount[u.teacherName][d]) || 0;
+                if (curD >= maxD) return false;
+              }
+            }
+
+            if (u.roomId) {
+              const roomObj = this.specialRooms.find(r => r.id === u.roomId);
+              const maxCap = roomObj ? (roomObj.capacity || 1) : 1;
+              const curOcc = (roomGrid[u.roomId] && roomGrid[u.roomId][sIdx]) || 0;
+              if (curOcc >= maxCap) return false;
+            }
+
+            return true;
+          };
+
+          const getSoftScore = (u, sIdx) => {
+            const d = Math.floor(sIdx / 7);
+            const p = (sIdx % 7) + 1;
+            let score = (Math.random() * 4 - 2);
+
+            const cIdx = classIdMap[u.classId];
+            let sameSubToday = 0;
+            for (let period = 0; period < 7; period++) {
+              const otherUid = classGrid[cIdx][d * 7 + period];
+              if (otherUid !== -1) {
+                const otherU = units.find(x => x.id === otherUid);
+                if (otherU && otherU.subjectId === u.subjectId) sameSubToday++;
+              }
+            }
+            if (sameSubToday > 0) score += u.allowDouble ? 2 : 40;
+            if (u.isCore) {
+              if (p <= 3) score -= 18;
+              else if (p === 4) score -= 8;
+              else score += 30;
+            }
+            if (u.subjectName.includes('體育') || u.subjectName.includes('健體')) {
+              if (p === 5) score += 60;
+              else if (p === 2 || p === 3 || p === 6) score -= 15;
+            }
+            return score;
+          };
+
+          // 1. 預排鎖定
+          for (const p of this.preClassSubject) {
+            if (p && p.type === 'must' && p.classId && p.subjectId) {
+              const sIdx = indexOfSlot(p.day, p.period);
+              const u = units.find(x => x.classId === p.classId && x.subjectId === p.subjectId && !x.isFixed && x.slotIdx === -1);
+              if (u && isSlotFeasible(u, sIdx)) {
+                placeUnit(u, sIdx);
+                u.isFixed = true;
+              }
+            }
+          }
+          for (const p of this.preTeacher) {
+            if (p && p.type === 'must' && p.teacherName) {
+              const sIdx = indexOfSlot(p.day, p.period);
+              const u = units.find(x => x.teacherName === p.teacherName && !x.isFixed && x.slotIdx === -1);
+              if (u && isSlotFeasible(u, sIdx)) {
+                placeUnit(u, sIdx);
+                u.isFixed = true;
+              }
+            }
+          }
+
+          // 2. 排序受限度
+          const unassigned = units.filter(u => u.slotIdx === -1);
+          unassigned.sort((a, b) => {
+            const aWeight = (a.roomId ? 100 : 0) + (a.isCrossClass ? 50 : 0) + (a.allowDouble ? 20 : 0) + (Math.random() * 15);
+            const bWeight = (b.roomId ? 100 : 0) + (b.isCrossClass ? 50 : 0) + (b.allowDouble ? 20 : 0) + (Math.random() * 15);
+            return bWeight - aWeight;
+          });
+
+          // 3. 貪婪初始配置
+          for (const u of unassigned) {
+            const cand = [];
+            for (let s = 0; s < 35; s++) {
+              if (isSlotFeasible(u, s)) {
+                cand.push({ sIdx: s, score: getSoftScore(u, s) });
+              }
+            }
+            cand.sort((a, b) => a.score - b.score);
+            if (cand.length > 0) {
+              placeUnit(u, cand[0].sIdx);
+            }
+          }
+
+          // 4. 多階彈射鏈衝突修復
+          let iter = 0;
+          while (iter++ < maxIterPerRound) {
+            if (iter % 1500 === 0) {
+              if (typeof setImmediate !== 'undefined') await new Promise(r => setImmediate(r));
+              else await new Promise(r => setTimeout(r, 0));
+              if (this.aborted) break;
+            }
+
+            const unplaced = unassigned.filter(u => u.slotIdx === -1);
+            if (unplaced.length === 0) break;
+
+            const u = unplaced[Math.floor(Math.random() * unplaced.length)];
+            const cIdx = classIdMap[u.classId];
+
+            let placed = false;
+            for (let s = 0; s < 35; s++) {
+              if (isSlotFeasible(u, s)) {
+                placeUnit(u, s);
+                placed = true;
+                break;
+              }
+            }
+
+            if (!placed) {
+              const validSlotIndices = [];
+              for (let s = 0; s < 35; s++) {
+                if (u.validMask[s] && (!u.teacherName || !teacherForbidMask[u.teacherName]?.[s])) {
+                  validSlotIndices.push(s);
+                }
+              }
+              validSlotIndices.sort(() => Math.random() - 0.5);
+
+              for (const s of validSlotIndices) {
+                const occUid = classGrid[cIdx][s];
+                if (occUid !== -1) {
+                  const victim1 = units.find(x => x.id === occUid);
+                  if (victim1 && !victim1.isFixed) {
+                    removeUnit(victim1);
+                    if (isSlotFeasible(u, s)) {
+                      placeUnit(u, s);
+
+                      let v1Placed = false;
+                      for (let vs = 0; vs < 35; vs++) {
+                        if (isSlotFeasible(victim1, vs)) {
+                          placeUnit(victim1, vs);
+                          v1Placed = true;
+                          break;
+                        }
+                      }
+
+                      if (!v1Placed && this.mode === 'deep') {
+                        const v1ValidSlots = [];
+                        for (let vs = 0; vs < 35; vs++) {
+                          if (victim1.validMask[vs] && (!victim1.teacherName || !teacherForbidMask[victim1.teacherName]?.[vs])) {
+                            v1ValidSlots.push(vs);
+                          }
+                        }
+                        v1ValidSlots.sort(() => Math.random() - 0.5);
+
+                        for (const s2 of v1ValidSlots.slice(0, 10)) {
+                          const occUid2 = classGrid[cIdx][s2];
+                          if (occUid2 !== -1 && occUid2 !== u.id) {
+                            const victim2 = units.find(x => x.id === occUid2);
+                            if (victim2 && !victim2.isFixed) {
+                              removeUnit(victim2);
+                              if (isSlotFeasible(victim1, s2)) {
+                                placeUnit(victim1, s2);
+                                let v2Placed = false;
+                                for (let vs2 = 0; vs2 < 35; vs2++) {
+                                  if (isSlotFeasible(victim2, vs2)) {
+                                    placeUnit(victim2, vs2);
+                                    v2Placed = true;
+                                    break;
+                                  }
+                                }
+                                if (v2Placed) {
+                                  v1Placed = true;
+                                  break;
+                                } else {
+                                  removeUnit(victim1);
+                                  placeUnit(victim2, s2);
+                                }
+                              } else {
+                                placeUnit(victim2, s2);
+                              }
+                            }
+                          }
+                        }
+                      }
+
+                      if (v1Placed) {
+                        placed = true;
+                        break;
+                      } else {
+                        removeUnit(u);
+                        placeUnit(victim1, s);
+                      }
+                    } else {
+                      placeUnit(victim1, s);
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          totalIterationsSpent += iter;
+          const currentUnplaced = units.filter(u => u.slotIdx === -1).length;
+
+          if (currentUnplaced < bestOverallUnplaced) {
+            bestOverallUnplaced = currentUnplaced;
+            bestOverallUnits = units.map(u => ({ ...u }));
+          }
+
+          if (onProgress) {
+            await onProgress({
+              restart,
+              maxRestarts,
+              bestUnplaced: bestOverallUnplaced,
+              currentUnplaced,
+              percent: Math.min(95, Math.round((restart / maxRestarts) * 100))
+            });
+          }
+
+          if (bestOverallUnplaced === 0) break;
+        }
+
+        const finalUnits = bestOverallUnits || unitsTemplate;
+        const finalClassGrid = Array.from({ length: classCount }, () => new Int32Array(35).fill(-1));
+        const finalTeacherGrid = {};
+        const finalTeacherDayCount = {};
+        const finalRoomGrid = {};
+
+        const placeFinal = (u, sIdx) => {
+          const cIdx = classIdMap[u.classId];
+          finalClassGrid[cIdx][sIdx] = u.id;
+          u.slotIdx = sIdx;
+          const d = Math.floor(sIdx / 7);
+          if (u.teacherName) {
+            if (!finalTeacherGrid[u.teacherName]) finalTeacherGrid[u.teacherName] = new Int32Array(35).fill(-1);
+            finalTeacherGrid[u.teacherName][sIdx] = u.id;
+            if (!finalTeacherDayCount[u.teacherName]) finalTeacherDayCount[u.teacherName] = new Int32Array(5).fill(0);
+            finalTeacherDayCount[u.teacherName][d]++;
+          }
+          if (u.roomId) {
+            if (!finalRoomGrid[u.roomId]) finalRoomGrid[u.roomId] = new Int32Array(35).fill(0);
+            finalRoomGrid[u.roomId][sIdx]++;
+          }
+        };
+
+        const removeFinal = (u) => {
+          const sIdx = u.slotIdx;
+          if (sIdx === -1) return;
+          const cIdx = classIdMap[u.classId];
+          finalClassGrid[cIdx][sIdx] = -1;
+          const d = Math.floor(sIdx / 7);
+          if (u.teacherName && finalTeacherGrid[u.teacherName]) {
+            finalTeacherGrid[u.teacherName][sIdx] = -1;
+            if (finalTeacherDayCount[u.teacherName]) finalTeacherDayCount[u.teacherName][d]--;
+          }
+          if (u.roomId && finalRoomGrid[u.roomId]) finalRoomGrid[u.roomId][sIdx]--;
+          u.slotIdx = -1;
+        };
+
+        const isSlotFeasibleFinal = (u, sIdx) => {
+          if (!u.validMask[sIdx]) return false;
+          const cIdx = classIdMap[u.classId];
+          if (finalClassGrid[cIdx][sIdx] !== -1) return false;
+          if (u.teacherName && teacherForbidMask[u.teacherName]?.[sIdx]) return false;
+          if (u.teacherName && teacherForbidMask['ALL']?.[sIdx]) return false;
+          if (classSubjectForbidMask[`${u.classId}_${u.subjectId}`]?.[sIdx]) return false;
+          if (u.teacherName) {
+            if (finalTeacherGrid[u.teacherName] && finalTeacherGrid[u.teacherName][sIdx] !== -1) return false;
+            const mutex = mutexMap[u.teacherName];
+            if (mutex) {
+              for (const mTeacher of mutex) {
+                if (finalTeacherGrid[mTeacher] && finalTeacherGrid[mTeacher][sIdx] !== -1) return false;
+              }
+            }
+            const maxD = teacherMaxDaily[u.teacherName] || teacherMaxDaily['ALL'];
+            if (maxD) {
+              const d = Math.floor(sIdx / 7);
+              const curD = (finalTeacherDayCount[u.teacherName] && finalTeacherDayCount[u.teacherName][d]) || 0;
+              if (curD >= maxD) return false;
+            }
+          }
+          if (u.roomId) {
+            const roomObj = this.specialRooms.find(r => r.id === u.roomId);
+            const maxCap = roomObj ? (roomObj.capacity || 1) : 1;
+            const curOcc = (finalRoomGrid[u.roomId] && finalRoomGrid[u.roomId][sIdx]) || 0;
+            if (curOcc >= maxCap) return false;
+          }
+          return true;
+        };
+
+        const getSoftScoreFinal = (u, sIdx) => {
+          const d = Math.floor(sIdx / 7);
+          const p = (sIdx % 7) + 1;
+          let score = 0;
+          const cIdx = classIdMap[u.classId];
+          let sameSubToday = 0;
+          for (let period = 0; period < 7; period++) {
+            const otherUid = finalClassGrid[cIdx][d * 7 + period];
+            if (otherUid !== -1) {
+              const otherU = finalUnits.find(x => x.id === otherUid);
+              if (otherU && otherU.subjectId === u.subjectId) sameSubToday++;
+            }
+          }
+          if (sameSubToday > 0) score += u.allowDouble ? 2 : 40;
+          if (u.isCore) {
+            if (p <= 3) score -= 18;
+            else if (p === 4) score -= 8;
+            else score += 30;
+          }
+          if (u.subjectName.includes('體育') || u.subjectName.includes('健體')) {
+            if (p === 5) score += 60;
+            else if (p === 2 || p === 3 || p === 6) score -= 15;
+          }
+          return score;
+        };
+
+        finalUnits.forEach(u => {
+          if (u.slotIdx !== -1) {
+            const s = u.slotIdx;
+            u.slotIdx = -1;
+            placeFinal(u, s);
+          }
+        });
+
+        let temp = 100.0;
+        const coolingRate = 0.996;
+        for (let softStep = 0; softStep < 1500; softStep++) {
+          temp *= coolingRate;
+          const cls = this.classes[Math.floor(Math.random() * this.classes.length)];
+          if (!cls) continue;
+          const classUnits = finalUnits.filter(u => u.classId === cls.id && u.slotIdx !== -1 && !u.isFixed);
+          if (classUnits.length < 2) continue;
+
+          const uA = classUnits[Math.floor(Math.random() * classUnits.length)];
+          const uB = classUnits[Math.floor(Math.random() * classUnits.length)];
+          if (uA === uB) continue;
+
+          const sA = uA.slotIdx;
+          const sB = uB.slotIdx;
+
+          removeFinal(uA);
+          removeFinal(uB);
+
+          const scoreBefore = getSoftScoreFinal(uA, sA) + getSoftScoreFinal(uB, sB);
+
+          if (isSlotFeasibleFinal(uA, sB) && isSlotFeasibleFinal(uB, sA)) {
+            const scoreAfter = getSoftScoreFinal(uA, sB) + getSoftScoreFinal(uB, sA);
+            const delta = scoreAfter - scoreBefore;
+            if (delta < 0 || (temp > 1.0 && Math.random() < Math.exp(-delta / temp))) {
+              placeFinal(uA, sB);
+              placeFinal(uB, sA);
+              continue;
+            }
+          }
+
+          placeFinal(uA, sA);
+          placeFinal(uB, sB);
+        }
+
+        const endTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        const timeMs = Math.max(1, Math.round(endTime - startTime));
+        const unplacedUnits = finalUnits.filter(u => u.slotIdx === -1);
+        const unplacedCount = unplacedUnits.length;
+
+        if (unplacedCount > 0) {
+          const conflictSummary = {};
+          for (const u of unplacedUnits) {
+            const key = `${u.className} - ${u.subjectName} (${u.teacherName || '未配課'})`;
+            conflictSummary[key] = (conflictSummary[key] || 0) + 1;
+          }
+          for (const [k, count] of Object.entries(conflictSummary)) {
+            diagnostics.push(`未排定: 【${k}】共 ${count} 節。原因: 該時段科任教師在他班衝堂、專科教室容量已滿或排課限制衝突。`);
+          }
+        }
+
+        const result = {
+          success: unplacedCount === 0,
+          timetable: {},
+          diagnostics: diagnostics,
+          unplacedDetails: unplacedUnits.map(u => ({
+            classId: u.classId,
+            className: u.className,
+            subjectName: u.subjectName,
+            teacherName: u.teacherName,
+            roomName: u.roomName
+          })),
+          stats: {
+            totalUnits: finalUnits.length,
+            assignedUnits: finalUnits.length - unplacedCount,
+            conflicts: unplacedCount,
+            iterations: totalIterationsSpent,
+            timeMs
+          }
+        };
+
+        this.classes.forEach(c => { result.timetable[c.id] = {}; });
+        finalUnits.forEach(u => {
+          if (u.slotIdx !== -1) {
+            const key = slotKeyOf(u.slotIdx);
+            result.timetable[u.classId][key] = {
+              classId: u.classId,
+              className: u.className,
+              gradeId: u.gradeId,
+              subjectId: u.subjectId,
+              subjectName: u.subjectName,
+              teacherName: u.teacherName,
+              roomId: u.roomId,
+              roomName: u.roomName,
+              isCore: u.isCore
+            };
+          }
+        });
+
+        return result;
+      }
+    }
+
+    window.executeSmartScheduling = async function() {
+      const btn = document.getElementById('btn-start-scheduling');
+      const modal = document.getElementById('modal-scheduling-progress');
+      const pTitle = document.getElementById('modal-progress-title');
+      const pDesc = document.getElementById('modal-progress-desc');
+      const pBar = document.getElementById('modal-progress-bar');
+      const pDetail = document.getElementById('modal-progress-detail');
+      const intensitySelect = document.getElementById('select-scheduling-intensity');
+      const mode = intensitySelect ? intensitySelect.value : 'deep';
+
+      if (!AppState.classes || AppState.classes.length === 0) {
+        if (confirm('目前尚未建立任何班級資料，是否自動為您載入 6 個示範班級並立即開始排課？')) {
+          AppState = JSON.parse(JSON.stringify(defaultState));
+          initDemoAssignments(AppState);
+          saveState();
+          renderClassesModule();
+          renderSubjectsRoomsModule();
+          renderAssignmentsModule();
+          renderSchedulingModule();
+        } else {
+          showToast('請先至【功能 1】建立班級或至【功能 2】設定科目！', 'error');
+          return;
+        }
+      }
+
+      let repairedCount = 0;
+      const validClassIds = new Set(AppState.classes.map(c => c.id));
+      const prevAssignLen = AppState.assignments.length;
+      AppState.assignments = AppState.assignments.filter(a => validClassIds.has(a.classId));
+      if (AppState.assignments.length !== prevAssignLen) repairedCount++;
+
+      AppState.classes.forEach(c => {
+        const subjects = ensureGradeSubjects(c.gradeId);
+        const validSubIds = new Set(subjects.map(s => s.id));
+        const seenSubIds = new Set();
+
+        AppState.assignments = AppState.assignments.filter(a => {
+          if (a.classId !== c.id) return true;
+          if (!validSubIds.has(a.subjectId)) return false;
+          if (seenSubIds.has(a.subjectId)) return false;
+          seenSubIds.add(a.subjectId);
+          return true;
+        });
+
+        subjects.forEach(s => {
+          let a = AppState.assignments.find(x => x.classId === c.id && x.subjectId === s.id);
+          if (!a) {
+            a = { classId: c.id, gradeId: c.gradeId, subjectId: s.id, subjectName: s.name, teacherName: '', weeklyPeriods: s.weeklyPeriods, roomId: null };
+            AppState.assignments.push(a);
+            repairedCount++;
+          } else {
+            if (a.teacherName && (a.teacherName.startsWith('導師_C_') || a.teacherName.startsWith('導師_c_') || a.teacherName.includes('178917'))) {
+              a.teacherName = '';
+              repairedCount++;
+            }
+            if (!a.subjectName) { a.subjectName = s.name; repairedCount++; }
+            if (a.weeklyPeriods === undefined) { a.weeklyPeriods = s.weeklyPeriods; repairedCount++; }
+          }
+        });
+      });
+
+      if (repairedCount > 0) saveState();
+
+      let activeEngine = null;
+      const btnAbort = document.getElementById('btn-abort-scheduling');
+      if (btnAbort) {
+        btnAbort.onclick = () => {
+          if (activeEngine) {
+            activeEngine.abort();
+            showToast('已請求中斷搜尋，正在產出當前最佳解...', 'info');
+          }
+        };
+      }
+
+      if (modal) {
+        modal.classList.remove('hidden');
+        if (pBar) pBar.style.width = '10%';
+        if (pTitle) pTitle.textContent = mode === 'deep' ? '🚀 深度極限排課搜尋中...' : '⚡ 智慧排課運算中...';
+        if (pDesc) pDesc.textContent = mode === 'deep' ? '正在透過多輪重啟與二階彈射鏈克服限制條件...' : '正在進行 CSP 前向檢驗與衝堂修復...';
+        if (pDetail) pDetail.textContent = `已準備全校 ${AppState.classes.length} 個班級待排課程...`;
+        if (window.lucide) lucide.createIcons();
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-75', 'cursor-not-allowed');
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>深度排課運算中...</span>`;
+        if (window.lucide) lucide.createIcons();
+      }
+
+      showToast(mode === 'deep' ? '已啟動深度極限排課...' : '正在執行標準排課運算...', 'info');
+      await new Promise(r => setTimeout(r, 60));
+
+      activeEngine = new HighSpeedTimetableEngine({
+        periodsPerDay: 7,
+        classes: AppState.classes,
+        gradeSubjects: AppState.gradeSubjects,
+        specialRooms: AppState.specialRooms,
+        assignments: AppState.assignments,
+        preTeacher: AppState.preTeacher,
+        preClassSubject: AppState.preClassSubject,
+        dailyTeacherRules: AppState.dailyTeacherRules,
+        teacherMutexes: AppState.teacherMutexes,
+        mode: mode
+      });
+
+      try {
+        const result = await activeEngine.solveAsync(async (prog) => {
+          if (pBar) pBar.style.width = `${prog.percent}%`;
+          if (pTitle) pTitle.textContent = `深度排課搜尋中 (第 ${prog.restart} / ${prog.maxRestarts} 輪)...`;
+          if (pDesc) pDesc.textContent = `當前最佳成果: 剩餘 ${prog.bestUnplaced} 節未排 (當前輪次未排: ${prog.currentUnplaced} 節)`;
+          if (pDetail) pDetail.textContent = prog.bestUnplaced === 0 ? '✨ 已提前尋獲 100% 零衝突解！' : '正在動態計算彈射路徑...';
+        });
+
+        if (result.stats.totalUnits === 0) {
+          if (modal) modal.classList.add('hidden');
+          alert('⚠️ 目前各年級設定之每週節數合計為 0，請先至【功能 2】設定各科目每週節數！');
+          return;
+        }
+
+        AppState.timetable = result.timetable;
+        saveState();
+
+        if (pBar) pBar.style.width = '100%';
+        if (pDetail) pDetail.textContent = `運算完成！耗時 ${result.stats.timeMs} ms，衝突數: ${result.stats.conflicts}。`;
+
+        setTimeout(() => {
+          if (modal) modal.classList.add('hidden');
+
+          const statusPanel = document.getElementById('panel-scheduling-status');
+          statusPanel.classList.remove('hidden');
+          document.getElementById('text-scheduling-time').textContent = `耗時：${result.stats.timeMs} ms (${result.stats.iterations} 次鏈式疊代)`;
+
+          const badge = document.getElementById('icon-status-badge');
+          const title = document.getElementById('title-status-banner');
+          const diagDiv = document.getElementById('content-status-diagnostics');
+
+          if (result.success) {
+            badge.className = 'p-1.5 bg-emerald-100 text-emerald-700 rounded-lg';
+            badge.innerHTML = '<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>';
+            title.textContent = '🎉 排課成功 (100% 零衝突)';
+
+            diagDiv.innerHTML = `
+              <div class="p-3 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-lg space-y-1.5">
+                <div class="font-bold">全校 ${result.stats.totalUnits} 節課程已全數排定完畢！</div>
+                <div class="text-[11px] text-emerald-800 grid grid-cols-1 sm:grid-cols-2 gap-1 pt-1 border-t border-emerald-200">
+                  <div>✔️ 硬約束 100% 滿足 (教師零衝堂、科任教室無衝突)</div>
+                  <div>✔️ 預排作業完整鎖定 (一定排/不排完全落實)</div>
+                  <div>✔️ 核心主科晨間優先與體育避午後退火優化完成</div>
+                </div>
+              </div>
+            `;
+            showToast('🎉 全校課表已零衝突排定！', 'success');
+          } else {
+            badge.className = 'p-1.5 bg-amber-100 text-amber-800 rounded-lg';
+            badge.innerHTML = '<i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i>';
+            title.textContent = `⚠️ 已排定 ${result.stats.assignedUnits}/${result.stats.totalUnits} 節 (剩餘 ${result.stats.conflicts} 節受限未排)`;
+
+            diagDiv.innerHTML = `
+              <div class="p-3 bg-amber-50 text-amber-900 border border-amber-200 rounded-lg space-y-1.5">
+                <div class="font-bold">排課瓶頸與受限原因診斷報告：</div>
+                <ul class="text-xs text-amber-800 list-disc list-inside space-y-1">
+                  ${result.diagnostics.map(d => `<li>${d}</li>`).join('')}
+                </ul>
+              </div>
+            `;
+            showToast(`已排定 ${result.stats.assignedUnits} 節，剩餘 ${result.stats.conflicts} 節受限請見診斷報告。`, 'warning');
+          }
+
+          populateSchedulingDropdowns();
+          renderActiveTimetable();
+        }, 300);
+
+      } catch (err) {
+        console.error('Scheduling error:', err);
+        if (modal) modal.classList.add('hidden');
+        showToast('排課過程中發生錯誤: ' + err.message, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-75', 'cursor-not-allowed');
+          btn.innerHTML = `<i data-lucide="play" class="w-4 h-4 fill-white"></i><span>開始智慧排課 (Execute)</span>`;
+          if (window.lucide) lucide.createIcons();
+        }
+      }
+    };
+
+    document.getElementById('btn-start-scheduling').addEventListener('click', window.executeSmartScheduling);
+
+    document.getElementById('btn-clear-timetable').addEventListener('click', () => {
+      if (!confirm('確定要清除目前已排定的課表嗎？')) return;
+      AppState.timetable = {};
+      saveState();
+      renderActiveTimetable();
+      document.getElementById('panel-scheduling-status').classList.add('hidden');
+      showToast('課表已清除', 'info');
+    });
+
+    document.getElementById('btn-export-master-excel').addEventListener('click', () => {
+      if (!AppState.timetable || Object.keys(AppState.timetable).length === 0) {
+        showToast('尚無課表可匯出', 'error');
+        return;
+      }
+
+      const wb = XLSX.utils.book_new();
+      const days = getPeriodsRange(5);
+      const dayNames = { 1: '週一', 2: '週二', 3: '週三', 4: '週四', 5: '週五' };
+
+      const masterRows = [];
+      AppState.classes.forEach(c => {
+        const row = { "班級": c.className, "年級": `${c.gradeId}年級` };
+        days.forEach(d => {
+          for (let p = 1; p <= 7; p++) {
+            const u = AppState.timetable[c.id]?.[`${d}-${p}`];
+            row[`${dayNames[d]}_第${p}節`] = u ? `${u.subjectName} (${u.teacherName})` : '';
+          }
+        });
+        masterRows.push(row);
+      });
+      const wsMaster = XLSX.utils.json_to_sheet(masterRows);
+      XLSX.utils.book_append_sheet(wb, wsMaster, "全校總課表");
+
+      AppState.classes.forEach(c => {
+        const cRows = [];
+        for (let p = 1; p <= 7; p++) {
+          const r = { "節次": `第 ${p} 節` };
+          days.forEach(d => {
+            const u = AppState.timetable[c.id]?.[`${d}-${p}`];
+            r[dayNames[d]] = u ? `${u.subjectName} (${u.teacherName})` : '';
+          });
+          cRows.push(r);
+        }
+        const wsClass = XLSX.utils.json_to_sheet(cRows);
+        XLSX.utils.book_append_sheet(wb, wsClass, c.className);
+      });
+
+      XLSX.writeFile(wb, "校園智慧排課系統_全校課表.xlsx");
+      showToast('全校課表已成功匯出為 Excel 多工作表檔案！', 'success');
+    });
+
+    document.getElementById('btn-print-timetable').addEventListener('click', () => {
+      window.print();
+    });
+
+    document.getElementById('btn-load-demo').addEventListener('click', () => {
+      if (!confirm('確定載入完整示範資料嗎？這將覆蓋現有編輯內容。')) return;
+      AppState = JSON.parse(JSON.stringify(defaultState));
+      initDemoAssignments(AppState);
+      saveState();
+      renderClassesModule();
+      renderSubjectsRoomsModule();
+      renderAssignmentsModule();
+      renderSchedulingModule();
+      showToast('示範資料載入完成！', 'success');
+    });
+
+    document.getElementById('btn-export-json').addEventListener('click', () => {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(AppState, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `校園排課系統專案備份_${new Date().toISOString().slice(0,10)}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showToast('專案備份檔 (.json) 已下載', 'success');
+    });
+
+    document.getElementById('input-import-json').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const parsed = JSON.parse(evt.target.result);
+          if (parsed && parsed.classes && (parsed.gradeSubjects || parsed.subjects)) {
+            if (!parsed.gradeSubjects && parsed.subjects) {
+              parsed.gradeSubjects = createDefaultGradeSubjects();
+            }
+            AppState = parsed;
+            saveState();
+            renderClassesModule();
+            showToast('專案已成功還原！', 'success');
+          } else {
+            showToast('無效的專案備份檔格式', 'error');
+          }
+        } catch (err) {
+          showToast('JSON 解析失敗', 'error');
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
+    document.getElementById('btn-reset-data').addEventListener('click', () => {
+      if (!confirm('警告：確定要清空所有資料並重設為空白專案嗎？')) return;
+      AppState = {
+        grades: getPeriodsRange(6),
+        classes: [],
+        gradeSubjects: createDefaultGradeSubjects(),
+        specialRooms: [],
+        assignments: [],
+        preTeacher: [],
+        preClassSubject: [],
+        dailyTeacherRules: [],
+        teacherMutexes: [],
+        timetable: {},
+        periodsPerDay: 7
+      };
+      saveState();
+      renderClassesModule();
+      renderSubjectsRoomsModule();
+      renderAssignmentsModule();
+      renderSchedulingModule();
+      showToast('所有資料已重設', 'info');
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) lucide.createIcons();
+      renderClassesModule();
+      renderSubjectsRoomsModule();
+      renderAssignmentsModule();
+      renderSchedulingModule();
+    });
+  </script>
+</body>
+</html>
